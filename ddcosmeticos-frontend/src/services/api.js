@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Cria a conexão apontando para o seu Backend na porta 8080
 const api = axios.create({
-  baseURL: 'http://192.168.0.9:8080/api/v1',
+  baseURL: 'http://192.168.0.6:8080/api/v1',
 });
 
 // "Interceptador": Antes de cada pedido, verifica se tem um token salvo
