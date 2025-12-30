@@ -1,67 +1,47 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AppLayout } from "@/components/layout/AppLayout";
 
-// Componentes de Páginas e Layout
-import Login from './pages/Login';
-import Layout from './components/Layout';
+// --- SEUS COMPONENTES ---
+// Se você já tem os arquivos reais, importe-os aqui:
+// import Login from "./pages/Login";
+// import Produtos from "./pages/Produtos";
 
-// Páginas do Sistema
-import Produtos from './pages/Produtos';
-import ProdutoFormulario from './pages/Produtos/Formulario';
-
-// --- Componentes Temporários (Placeholders) ---
-// Estes serão substituídos pelos arquivos reais no futuro
-const Dashboard = () => (
-  <div style={{ padding: 20 }}>
-    <h1>📊 Dashboard Gerencial</h1>
-    <p>Gráficos de vendas e indicadores aparecerão aqui.</p>
+// --- PLACEHOLDERS (Caso você precise copiar o código dos seus antigos arquivos) ---
+const Login = () => (
+  <div className="flex h-screen items-center justify-center bg-muted/20">
+    <div className="w-full max-w-sm space-y-4 p-8 bg-white border rounded-lg shadow-sm">
+      <h1 className="text-2xl font-bold text-center">Login DD Cosméticos</h1>
+      <input className="w-full p-2 border rounded" placeholder="Email" />
+      <input className="w-full p-2 border rounded" type="password" placeholder="Senha" />
+      {/* Simulação de Login: Vai para /dashboard */}
+      <a href="/dashboard" className="block w-full bg-black text-white text-center p-2 rounded hover:bg-gray-800">
+        Entrar
+      </a>
+    </div>
   </div>
 );
 
-const Pdv = () => (
-  <div style={{ padding: 20 }}>
-    <h1>🛒 Frente de Caixa (PDV)</h1>
-    <p>Tela de vendas rápida.</p>
-  </div>
-);
-
-// --- Proteção de Rotas ---
-const RotaPrivada = () => {
-  const token = localStorage.getItem('token');
-
-  // Se não tiver token, manda para o Login.
-  // Se tiver, carrega o Layout (Menu Lateral) que por sua vez carrega o conteúdo (Outlet)
-  return token ? <Layout /> : <Navigate to="/" />;
-};
+const Dashboard = () => <div className="p-4"><h1 className="text-2xl font-bold">Dashboard Geral</h1><p>Visão geral da DD Cosméticos.</p></div>;
+const Produtos = () => <div className="p-4"><h1 className="text-2xl font-bold">Gerenciar Produtos</h1><p>Lista de cosméticos aqui.</p></div>;
 
 function App() {
   return (
     <BrowserRouter>
-      {/* Container de notificações (Toasts) global */}
-      <ToastContainer autoClose={3000} position="top-right" />
-
       <Routes>
-        {/* Rota Pública: Login */}
+        {/* 1. Rota Pública: LOGIN (Sem Header, Sem Menu) */}
         <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />
 
-        {/* Rotas Privadas (Protegidas) */}
-        <Route element={<RotaPrivada />}>
-
+        {/* 2. Rotas Privadas (Protegidas pelo AppLayout) */}
+        <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/pdv" element={<Pdv />} />
-
-          {/* Rotas de Produtos */}
-          <Route path="/produtos" element={<Produtos />} />       {/* Lista */}
-          <Route path="/produtos/novo" element={<ProdutoFormulario />} /> {/* Cadastro */}
-
-          {/* Adicione outras rotas do sistema aqui (ex: Financeiro, Clientes) */}
-          <Route path="/financeiro" element={<h1>💰 Financeiro (Em breve)</h1>} />
-
+          <Route path="/produtos" element={<Produtos />} />
+          <Route path="/vendas" element={<div>Tela de Vendas</div>} />
+          <Route path="/clientes" element={<div>Tela de Clientes</div>} />
         </Route>
 
-        {/* Rota para capturar endereços errados */}
-        <Route path="*" element={<Navigate to="/" />} />
+        {/* Rota Coringa (Redireciona para login se não achar nada) */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
