@@ -1,68 +1,40 @@
-import { NavLink, Link } from "react-router-dom";
-import { User } from "lucide-react";
+import { Menu, User } from "lucide-react";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Clock } from "@/components/ui/clock"; // <--- Importamos o Relógio
-import { cn } from "@/lib/utils";
-
-const navItems = [
-  { name: "Dashboard", path: "/dashboard" },
-  { name: "Produtos", path: "/produtos" },
-  { name: "Vendas", path: "/vendas" },
-  { name: "Clientes", path: "/clientes" },
-];
+import { Clock } from "@/components/ui/clock";
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between px-4 md:px-8">
+    <header className="sticky top-0 z-20 w-full h-16 bg-background/95 backdrop-blur border-b flex items-center justify-between px-4 md:px-6">
 
-        {/* ESQUERDA: Logo + Navegação */}
-        <div className="flex items-center gap-6 md:gap-10">
-          <Link to="/dashboard" className="flex items-center gap-2">
-            {/* INSERÇÃO DA LOGO AQUI */}
-            <img
-              src="/logo-ddcosmeticos.png"
-              alt="DD Cosméticos"
-              className="h-10 w-auto object-contain"
-            />
-          </Link>
+      {/* ESQUERDA: Menu Mobile (Só aparece em telas pequenas) */}
+      <div className="md:hidden">
+         <MobileNav />
+      </div>
 
-          <nav className="hidden md:flex gap-6 text-sm font-medium">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  cn(
-                    "transition-colors hover:text-primary relative py-1",
-                    isActive
-                      ? "text-primary font-bold after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-full after:h-[2px] after:bg-primary"
-                      : "text-muted-foreground"
-                  )
-                }
-              >
-                {item.name}
-              </NavLink>
-            ))}
-          </nav>
-        </div>
+      {/* CENTRO/DIREITA (Desktop) */}
+      <div className="flex-1 flex items-center justify-end md:justify-between">
+         {/* Título da Página ou Breadcrumb (Visível só Desktop) */}
+         <div className="hidden md:block text-sm text-muted-foreground">
+            Painel Administrativo
+         </div>
 
-        {/* DIREITA: Relógio + Ações */}
-        <div className="flex items-center gap-2">
+         <div className="flex items-center gap-4">
+            <div className="hidden md:block">
+               <Clock />
+            </div>
 
-          {/* O Relógio aparece aqui (Visível desktop/tablet) */}
-          <div className="hidden sm:block">
-            <Clock />
-          </div>
-
-          <Button variant="ghost" size="icon" className="hidden sm:inline-flex rounded-full border border-gray-200">
-            <User className="h-5 w-5 text-primary" />
-            <span className="sr-only">Perfil</span>
-          </Button>
-
-          <MobileNav />
-        </div>
+            <div className="flex items-center gap-3 pl-4 border-l">
+               <div className="text-right hidden sm:block">
+                  <p className="text-sm font-medium leading-none">Admin</p>
+                  <p className="text-xs text-muted-foreground">admin@ddcosmeticos.com</p>
+               </div>
+               <Button variant="ghost" size="icon" className="rounded-full bg-muted/50">
+                  <User className="h-5 w-5 text-primary" />
+               </Button>
+            </div>
+         </div>
       </div>
     </header>
   );

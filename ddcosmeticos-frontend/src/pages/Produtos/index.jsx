@@ -1,221 +1,111 @@
-import { useState, useEffect } from 'react';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  IconButton,
-  Chip,
-  Avatar,
-  useTheme,
-  useMediaQuery,
-  Card,
-  CardContent,
-  Grid,
-  Divider
-} from '@mui/material';
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon
-} from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import api from '../../services/api';
+  Plus,
+  Search,
+  Filter,
+  FileEdit,
+  Trash2,
+  Package
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+// Dados Falsos para Visualização (Substitua pela API depois)
+const produtosExemplo = [
+  { id: 1, nome: "Shampoo Hidratante 300ml", codigo: "78910001", preco: 45.90, estoque: 120, status: "Ativo" },
+  { id: 2, nome: "Condicionador Reparador", codigo: "78910002", preco: 39.90, estoque: 85, status: "Ativo" },
+  { id: 3, nome: "Máscara Capilar Ouro", codigo: "78910003", preco: 89.90, estoque: 5, status: "Baixo" },
+  { id: 4, nome: "Óleo Finalizador", codigo: "78910004", preco: 29.90, estoque: 0, status: "Esgotado" },
+];
 
 export default function Produtos() {
   const navigate = useNavigate();
-  const theme = useTheme();
-  // Esta variável será TRUE se a tela for pequena (celular)
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-  const [produtos, setProdutos] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    carregarProdutos();
-  }, []);
-
-  const carregarProdutos = async () => {
-    try {
-      const response = await api.get('/produtos');
-      setProdutos(response.data);
-    } catch (error) {
-      toast.error('Erro ao carregar a lista de produtos.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatarMoeda = (valor) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(valor || 0);
-  };
-
-  // --- COMPONENTE VISUAL: VERSÃO DESKTOP (TABELA) ---
-  const DesktopView = () => (
-    <Paper elevation={0} sx={{ borderRadius: 3, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
-      <TableContainer>
-        <Table>
-          <TableHead sx={{ backgroundColor: '#f8f9fa' }}>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 'bold' }}>Foto</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Descrição</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Cód. Barras</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Preço</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Estoque</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 'bold' }}>Ações</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {produtos.map((produto) => (
-              <TableRow key={produto.id} hover>
-                <TableCell>
-                  <Avatar
-                    src={produto.urlImagem ? `http://192.168.0.9:8080${produto.urlImagem}` : null} // Atenção ao IP
-                    variant="rounded"
-                    sx={{ width: 50, height: 50, bgcolor: 'primary.light' }}
-                  >
-                    {produto.descricao?.charAt(0)}
-                  </Avatar>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                    {produto.descricao}
-                  </Typography>
-                  <Typography variant="caption" color="textSecondary">
-                    NCM: {produto.ncm}
-                  </Typography>
-                </TableCell>
-                <TableCell>{produto.codigoBarras || '-'}</TableCell>
-                <TableCell sx={{ color: 'primary.main', fontWeight: 'bold' }}>
-                  {formatarMoeda(produto.precoVenda)}
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={produto.quantidadeEmEstoque}
-                    color={produto.quantidadeEmEstoque <= 5 ? 'error' : 'success'}
-                    size="small"
-                    variant="outlined"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={produto.ativo ? 'Ativo' : 'Inativo'}
-                    color={produto.ativo ? 'success' : 'default'}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell align="right">
-                  <IconButton size="small" color="primary"><EditIcon /></IconButton>
-                  <IconButton size="small" color="error"><DeleteIcon /></IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Paper>
-  );
-
-  // --- COMPONENTE VISUAL: VERSÃO MOBILE (CARDS) ---
-  const MobileView = () => (
-    <Box>
-      {produtos.map((produto) => (
-        <Card key={produto.id} sx={{ mb: 2, borderRadius: 3, boxShadow: 1 }}>
-          <CardContent sx={{ display: 'flex', alignItems: 'flex-start', pb: 1 }}>
-            {/* Foto à Esquerda */}
-            <Avatar
-              src={produto.urlImagem ? `http://192.168.0.9:8080${produto.urlImagem}` : null} // Use o IP aqui também
-              variant="rounded"
-              sx={{ width: 70, height: 70, mr: 2, bgcolor: 'primary.light' }}
-            >
-              {produto.descricao?.charAt(0)}
-            </Avatar>
-
-            {/* Dados à Direita */}
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 'bold', lineHeight: 1.2, mb: 0.5 }}>
-                {produto.descricao}
-              </Typography>
-
-              <Typography variant="h6" color="primary" sx={{ fontWeight: 'bold' }}>
-                {formatarMoeda(produto.precoVenda)}
-              </Typography>
-
-              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <Chip
-                  label={`Estoque: ${produto.quantidadeEmEstoque}`}
-                  size="small"
-                  color={produto.quantidadeEmEstoque <= 5 ? 'error' : 'default'}
-                />
-                <Chip
-                    label={produto.codigoBarras || 'Sem EAN'}
-                    size="small"
-                    variant="outlined"
-                />
-              </Box>
-            </Box>
-          </CardContent>
-
-          <Divider />
-
-          {/* Botões de Ação Embaixo */}
-          <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end', bgcolor: '#fafafa' }}>
-             <Button startIcon={<EditIcon />} size="small">Editar</Button>
-             <Button startIcon={<DeleteIcon />} size="small" color="error">Excluir</Button>
-          </Box>
-        </Card>
-      ))}
-
-      {produtos.length === 0 && (
-         <Typography align="center" sx={{ mt: 4, color: 'text.secondary' }}>
-           Nenhum produto encontrado.
-         </Typography>
-      )}
-    </Box>
-  );
+  const [busca, setBusca] = useState("");
 
   return (
-    <Box>
-      {/* Cabeçalho Responsivo */}
-      <Box sx={{
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row', // No celular fica um embaixo do outro
-        justifyContent: 'space-between',
-        alignItems: isMobile ? 'stretch' : 'center',
-        mb: 3,
-        gap: 2
-      }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          Produtos
-        </Typography>
+    <div className="space-y-6">
 
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          size="large"
-          fullWidth={isMobile} // No celular o botão ocupa a largura toda
-          sx={{ borderRadius: 2, fontWeight: 'bold', py: isMobile ? 1.5 : 1 }}
-          onClick={() => navigate('/produtos/novo')}
-        >
-          Novo Produto
+      {/* Cabeçalho da Página */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
+            <Package className="h-8 w-8" /> Produtos
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Gerencie seu catálogo completo de cosméticos.
+          </p>
+        </div>
+        <Button onClick={() => navigate("/produtos/novo")} className="shadow-md font-bold">
+          <Plus className="mr-2 h-4 w-4" /> Novo Produto
         </Button>
-      </Box>
+      </div>
 
-      {/* Decide qual tela mostrar baseado no tamanho */}
-      {isMobile ? <MobileView /> : <DesktopView />}
+      {/* Barra de Ferramentas */}
+      <div className="bg-card p-4 rounded-lg border shadow-sm flex flex-col sm:flex-row gap-4 items-center">
+        <div className="relative w-full sm:flex-1">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <input
+            placeholder="Buscar por nome, código ou categoria..."
+            className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
+        <Button variant="outline" className="w-full sm:w-auto">
+          <Filter className="mr-2 h-4 w-4" /> Filtros
+        </Button>
+      </div>
 
-    </Box>
+      {/* Tabela Clean (Tailwind) */}
+      <div className="bg-card border rounded-lg shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-muted/50 border-b">
+              <tr>
+                <th className="h-12 px-4 font-medium text-muted-foreground">Produto</th>
+                <th className="h-12 px-4 font-medium text-muted-foreground">Código</th>
+                <th className="h-12 px-4 font-medium text-muted-foreground">Preço</th>
+                <th className="h-12 px-4 font-medium text-muted-foreground">Estoque</th>
+                <th className="h-12 px-4 font-medium text-muted-foreground">Status</th>
+                <th className="h-12 px-4 font-medium text-muted-foreground text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {produtosExemplo.map((prod) => (
+                <tr key={prod.id} className="hover:bg-muted/30 transition-colors">
+                  <td className="p-4 font-medium">{prod.nome}</td>
+                  <td className="p-4 text-muted-foreground">{prod.codigo}</td>
+                  <td className="p-4">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(prod.preco)}
+                  </td>
+                  <td className="p-4">
+                     <span className={prod.estoque < 10 ? "text-red-600 font-bold" : "text-foreground"}>
+                        {prod.estoque} un
+                     </span>
+                  </td>
+                  <td className="p-4">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      ${prod.status === 'Ativo' ? 'bg-green-100 text-green-800' :
+                        prod.status === 'Esgotado' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {prod.status}
+                    </span>
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                       <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600">
+                         <FileEdit className="h-4 w-4" />
+                       </Button>
+                       <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50">
+                         <Trash2 className="h-4 w-4" />
+                       </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }

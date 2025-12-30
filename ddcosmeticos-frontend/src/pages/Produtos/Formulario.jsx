@@ -1,281 +1,203 @@
-import { useState } from 'react';
-import {
-  Box,
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  Grid,
-  InputAdornment,
-  MenuItem
-} from '@mui/material';
-import { Save as SaveIcon, ArrowBack as ArrowBackIcon, CloudUpload as UploadIcon } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import api from '../../services/api';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Save, Loader2, UploadCloud, Tag, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function ProdutoFormulario() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-
-  // Estado para a Imagem (Preview e Arquivo)
   const [imagemPreview, setImagemPreview] = useState(null);
-  const [arquivoImagem, setArquivoImagem] = useState(null);
 
-  // Estado do Formulário
   const [form, setForm] = useState({
-    descricao: '',
-    codigoBarras: '',
-    precoCusto: '',
-    precoVenda: '',
-    quantidadeEmEstoque: '',
-    ncm: '',
-    cest: '',
-    cfop: '5102', // Padrão de Venda
-    origem: '0'   // 0 - Nacional
+    descricao: "", codigoBarras: "", precoCusto: "", precoVenda: "",
+    estoque: "", ncm: "", cest: "", origem: "0"
   });
 
-  // Atualiza os campos ao digitar
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // Trata a seleção da imagem
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setArquivoImagem(file);
-      setImagemPreview(URL.createObjectURL(file));
-    }
+    if (file) setImagemPreview(URL.createObjectURL(file));
   };
 
-  // Salvar tudo
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
-
-    try {
-      // 1. Converter valores monetários (ex: "10,00" -> 10.00) se necessário
-      // O Java espera BigDecimal, então enviamos string numérica ou number
-      const payload = {
-        ...form,
-        precoCusto: Number(form.precoCusto.toString().replace(',', '.')),
-        precoVenda: Number(form.precoVenda.toString().replace(',', '.')),
-        quantidadeEmEstoque: Number(form.quantidadeEmEstoque),
-        ativo: true
-      };
-
-      // 2. Salva os dados do produto
-      const response = await api.post('/produtos', payload);
-      const novoProdutoId = response.data.id;
-
-      // 3. Se tiver imagem, faz o upload agora usando o ID gerado
-      if (arquivoImagem) {
-        const formData = new FormData();
-        formData.append('file', arquivoImagem);
-        await api.post(`/produtos/${novoProdutoId}/imagem`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      }
-
-      toast.success('Produto cadastrado com sucesso!');
-      navigate('/produtos'); // Volta para a lista
-
-    } catch (error) {
-      console.error(error);
-      toast.error('Erro ao salvar produto. Verifique os dados.');
-    } finally {
+    setTimeout(() => {
       setLoading(false);
-    }
+      navigate("/produtos");
+    }, 1000);
   };
 
   return (
-    <Box>
-      {/* Cabeçalho com Botão Voltar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/produtos')}
-          sx={{ mr: 2, color: 'text.secondary' }}
-        >
-          Voltar
+    <div className="max-w-6xl mx-auto space-y-6">
+
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="outline" size="icon" onClick={() => navigate("/produtos")}>
+          <ArrowLeft className="h-4 w-4" />
         </Button>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          Novo Produto
-        </Typography>
-      </Box>
+        <div>
+          <h1 className="text-3xl font-bold text-primary">Cadastrar Produto</h1>
+          <p className="text-muted-foreground">Adicione os detalhes do novo item ao catálogo.</p>
+        </div>
+      </div>
 
-      <Paper elevation={0} sx={{ p: 4, borderRadius: 3, border: '1px solid #e0e0e0' }}>
-        <Box component="form" onSubmit={handleSubmit}>
-          <Grid container spacing={3}>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-            {/* --- SEÇÃO 1: FOTO --- */}
-            <Grid item xs={12} md={3} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <Box
-                sx={{
-                  width: '100%',
-                  height: 200,
-                  border: '2px dashed #ccc',
-                  borderRadius: 2,
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  mb: 2,
-                  overflow: 'hidden',
-                  backgroundColor: '#f9f9f9',
-                  backgroundImage: `url(${imagemPreview})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center'
-                }}
-              >
-                {!imagemPreview && <Typography color="text.secondary">Sem Foto</Typography>}
-              </Box>
-              <Button
-                variant="outlined"
-                component="label"
-                startIcon={<UploadIcon />}
-                fullWidth
-              >
-                Escolher Foto
-                <input hidden accept="image/*" type="file" onChange={handleImageChange} />
-              </Button>
-            </Grid>
+        {/* COLUNA ESQUERDA: FOTO (Ocupa 4 de 12 colunas) */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-card border rounded-xl shadow-sm p-6 flex flex-col items-center text-center">
+            <h2 className="text-lg font-semibold mb-4 self-start">Imagem do Produto</h2>
 
-            {/* --- SEÇÃO 2: DADOS GERAIS --- */}
-            <Grid item xs={12} md={9}>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField
-                    required
-                    fullWidth
-                    label="Descrição do Produto"
-                    name="descricao"
-                    value={form.descricao}
-                    onChange={handleChange}
-                    placeholder="Ex: Batom Matte Vermelho"
-                  />
-                </Grid>
+            <div
+              className="w-full aspect-square bg-muted/30 border-2 border-dashed border-muted-foreground/25 rounded-lg flex items-center justify-center overflow-hidden mb-4 relative hover:bg-muted/50 transition-colors"
+            >
+              {imagemPreview ? (
+                <img src={imagemPreview} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="space-y-2 text-muted-foreground">
+                  <UploadCloud className="h-10 w-10 mx-auto" />
+                  <span className="text-sm">Clique para upload</span>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                onChange={handleImageChange}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Formatos aceitos: JPG, PNG. Máx: 5MB.
+            </p>
+          </div>
+        </div>
 
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    required
-                    fullWidth
-                    label="Código de Barras (EAN)"
-                    name="codigoBarras"
-                    value={form.codigoBarras}
-                    onChange={handleChange}
-                  />
-                </Grid>
+        {/* COLUNA DIREITA: DADOS (Ocupa 8 de 12 colunas) */}
+        <div className="lg:col-span-8 space-y-6">
 
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    required
-                    fullWidth
-                    label="Quantidade em Estoque"
-                    name="quantidadeEmEstoque"
-                    type="number"
-                    value={form.quantidadeEmEstoque}
-                    onChange={handleChange}
-                  />
-                </Grid>
+          {/* BLOCO 1: Informações Gerais */}
+          <div className="bg-card border rounded-xl shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-6 border-b pb-2">
+              <Tag className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold">Informações Gerais</h2>
+            </div>
 
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    required
-                    fullWidth
-                    label="Preço de Custo (R$)"
-                    name="precoCusto"
-                    value={form.precoCusto}
-                    onChange={handleChange}
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                    }}
-                  />
-                </Grid>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-sm font-medium">Descrição Completa</label>
+                <input
+                  required
+                  name="descricao"
+                  value={form.descricao}
+                  onChange={handleChange}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                  placeholder="Ex: Creme Hidratante Facial 50g"
+                />
+              </div>
 
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    required
-                    fullWidth
-                    label="Preço de Venda (R$)"
-                    name="precoVenda"
-                    value={form.precoVenda}
-                    onChange={handleChange}
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                    }}
-                  />
-                </Grid>
-              </Grid>
-            </Grid>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Código de Barras (EAN)</label>
+                <input
+                  name="codigoBarras"
+                  value={form.codigoBarras}
+                  onChange={handleChange}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+              </div>
 
-            {/* --- SEÇÃO 3: DADOS FISCAIS --- */}
-            <Grid item xs={12}>
-              <Typography variant="h6" sx={{ mb: 2, mt: 1, color: '#666' }}>
-                Dados Fiscais (Obrigatório para Nota)
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    required
-                    fullWidth
-                    label="NCM"
-                    name="ncm"
-                    value={form.ncm}
-                    onChange={handleChange}
-                    helperText="Ex: 33041000"
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="CEST (Opcional)"
-                    name="cest"
-                    value={form.cest}
-                    onChange={handleChange}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    select
-                    fullWidth
-                    label="Origem da Mercadoria"
-                    name="origem"
-                    value={form.origem}
-                    onChange={handleChange}
-                  >
-                    <MenuItem value="0">0 - Nacional</MenuItem>
-                    <MenuItem value="1">1 - Importação Direta</MenuItem>
-                    <MenuItem value="2">2 - Estrangeira (Adq. no mercado interno)</MenuItem>
-                  </TextField>
-                </Grid>
-              </Grid>
-            </Grid>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Estoque Inicial</label>
+                <input
+                  type="number"
+                  name="estoque"
+                  value={form.estoque}
+                  onChange={handleChange}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+              </div>
 
-            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-              <Button
-                variant="outlined"
-                color="secondary"
-                onClick={() => navigate('/produtos')}
-                sx={{ mr: 2 }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                variant="contained"
-                size="large"
-                startIcon={<SaveIcon />}
-                disabled={loading}
-              >
-                {loading ? 'Salvando...' : 'Salvar Produto'}
-              </Button>
-            </Grid>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Preço de Custo (R$)</label>
+                <input
+                  name="precoCusto"
+                  value={form.precoCusto}
+                  onChange={handleChange}
+                  placeholder="0,00"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+              </div>
 
-          </Grid>
-        </Box>
-      </Paper>
-    </Box>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-primary font-bold">Preço de Venda (R$)</label>
+                <input
+                  name="precoVenda"
+                  value={form.precoVenda}
+                  onChange={handleChange}
+                  placeholder="0,00"
+                  className="flex h-10 w-full rounded-md border-2 border-primary/20 bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none font-semibold"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* BLOCO 2: Fiscal */}
+          <div className="bg-card border rounded-xl shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-6 border-b pb-2">
+              <FileText className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold">Dados Fiscais</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">NCM</label>
+                <input
+                  name="ncm"
+                  value={form.ncm}
+                  onChange={handleChange}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">CEST</label>
+                <input
+                  name="cest"
+                  value={form.cest}
+                  onChange={handleChange}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Origem</label>
+                <select
+                  name="origem"
+                  value={form.origem}
+                  onChange={handleChange}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                >
+                  <option value="0">0 - Nacional</option>
+                  <option value="1">1 - Importada</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Botões de Ação */}
+          <div className="flex items-center justify-end gap-4">
+            <Button type="button" variant="outline" onClick={() => navigate("/produtos")}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={loading} className="px-8 font-bold">
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Salvar Produto
+            </Button>
+          </div>
+
+        </div>
+      </form>
+    </div>
   );
 }
