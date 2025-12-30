@@ -11,11 +11,13 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 
+// Importação da Logo
+import logoImg from '../../assets/img/logo-dd.png';
+
 export default function Login() {
   const navigate = useNavigate();
 
-  // 1. Definição dos Estados (As "caixinhas" da memória)
-  // O Backend espera "login" e "senha", então vamos manter esses nomes
+  // Estados para armazenar os dados do formulário
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,14 +27,14 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // 2. Envio para o Backend
-      // ATENÇÃO: Aqui usamos a variável 'login' que definimos lá em cima (useState)
+      // Envia os dados para o Backend
+      // Nota: Mantivemos o campo 'login' pois foi o que funcionou no seu último teste.
       const response = await api.post('/auth/login', {
-        matricula: login,  // Envia o valor do estado 'login' para o campo 'login' do Java
-        senha: senha   // Envia o valor do estado 'senha' para o campo 'senha' do Java
+        matricula: login,
+        senha: senha
       });
 
-      // 3. Sucesso
+      // Sucesso: Salva o token e redireciona
       const { token, nome } = response.data;
       localStorage.setItem('token', token);
       localStorage.setItem('usuario', nome);
@@ -42,12 +44,12 @@ export default function Login() {
 
     } catch (error) {
       console.error(error);
-      // Tratamento de erro melhorado
+
       if (error.response) {
-         // O backend respondeu com erro (ex: 403 Forbidden)
+         // O backend respondeu com erro (ex: Senha incorreta)
          toast.error(error.response.data || 'Login ou senha inválidos.');
       } else if (error.request) {
-         // O backend não respondeu (Backend desligado ou erro de rede)
+         // O backend não respondeu (Servidor desligado)
          toast.error('Erro de conexão. O servidor está ligado?');
       } else {
          toast.error('Erro ao tentar fazer login.');
@@ -61,11 +63,17 @@ export default function Login() {
     <Container component="main" maxWidth="xs" style={{ height: '100vh', display: 'flex', alignItems: 'center' }}>
       <Paper elevation={3} style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
 
-        <Typography component="h1" variant="h5" color="primary" style={{ fontWeight: 'bold', marginBottom: '1rem' }}>
-          DD COSMÉTICOS
-        </Typography>
+        {/* --- ÁREA DA LOGO --- */}
+        <Box sx={{ mb: 3, mt: 1 }}>
+            <img
+              src={logoImg}
+              alt="Logo DD Cosméticos"
+              style={{ maxWidth: '180px', height: 'auto' }}
+            />
+        </Box>
+        {/* ------------------- */}
 
-        <Typography component="h2" variant="h6" style={{ marginBottom: '1.5rem' }}>
+        <Typography component="h2" variant="h6" style={{ marginBottom: '1.5rem', color: '#666' }}>
           Acesso ao Sistema
         </Typography>
 
@@ -75,11 +83,11 @@ export default function Login() {
             required
             fullWidth
             id="login"
-            label="Matrícula"
+            label="Matrícula / Usuário"
             name="login"
             autoFocus
-            value={login} // Liga o campo visual à variável 'login'
-            onChange={(e) => setLogin(e.target.value)} // Atualiza a variável ao digitar
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
           />
           <TextField
             margin="normal"
@@ -89,7 +97,7 @@ export default function Login() {
             label="Senha"
             type="password"
             id="senha"
-            value={senha} // Liga o campo visual à variável 'senha'
+            value={senha}
             onChange={(e) => setSenha(e.target.value)}
           />
 
