@@ -13,6 +13,7 @@ import PDV from "@/pages/Vendas/PDV";
 import Financeiro from "@/pages/Financeiro";
 import Relatorios from "@/pages/Relatorios"; // <--- ESTE IMPORT É ESSENCIAL
 import Importacao from "@/pages/Configuracoes/Importacao";
+import Configuracoes from "@/pages/Configuracoes"; // Importa o index.jsx que acabamos de criar
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
           <Route path="/relatorios" element={<Relatorios />} />
 
           {/* Configurações */}
+          <Route path="/configuracoes" element={<Configuracoes />} />
           <Route path="/configuracoes/importacao" element={<Importacao />} />
         </Route>
 
