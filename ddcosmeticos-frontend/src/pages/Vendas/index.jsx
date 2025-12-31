@@ -1,77 +1,126 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { ShoppingBag, Plus, Search, Calendar, Eye } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, ShoppingCart, Search, Printer, Eye, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { db } from "@/services/db"; // Ler do banco
+import { Input } from "@/components/ui/input";
+import { useNavigate } from "react-router-dom";
+import { db } from "@/services/db";
+import { Cupom } from "@/components/Impressao/Cupom";
 
 export default function Vendas() {
   const navigate = useNavigate();
   const [vendas, setVendas] = useState([]);
+  const [busca, setBusca] = useState("");
+  const [vendaSelecionada, setVendaSelecionada] = useState(null);
 
   useEffect(() => {
-    setVendas(db.getVendas());
+    // Carrega e inverte a ordem (mais recentes primeiro)
+    setVendas(db.getVendas().reverse());
   }, []);
 
+  const vendasFiltradas = vendas.filter(v =>
+    (v.cliente && v.cliente.toLowerCase().includes(busca.toLowerCase())) ||
+    (v.id && v.id.toString().includes(busca))
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+
+      {/* Exibe o Cupom se selecionado */}
+      {vendaSelecionada && (
+        <Cupom venda={vendaSelecionada} onClose={() => setVendaSelecionada(null)} />
+      )}
+
+      {/* CABEÇALHO */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
-            <ShoppingBag className="h-8 w-8" /> Gestão de Vendas
+          {/* Título Turquesa #34BFBF */}
+          <h1 className="text-3xl font-bold tracking-tight text-[#34BFBF] flex items-center gap-2">
+            <ShoppingCart className="h-8 w-8" /> Histórico de Vendas
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Histórico de transações e abertura de caixa.
-          </p>
+          <p className="text-slate-500">Consulte todas as vendas realizadas.</p>
         </div>
-        <Button onClick={() => navigate("/vendas/pdv")} className="shadow-md font-bold h-11 px-6">
-          <Plus className="mr-2 h-5 w-5" /> Abrir PDV
+
+        {/* Botão de Ação Rosa #F22998 */}
+        <Button
+            onClick={() => navigate("/vendas/pdv")}
+            className="bg-[#F22998] hover:bg-[#d91e85] text-white font-bold shadow-lg shadow-[#F22998]/20"
+        >
+          <Plus className="mr-2 h-4 w-4" /> Nova Venda (PDV)
         </Button>
       </div>
 
-      {/* Lista de Vendas */}
-      <div className="bg-card border rounded-lg shadow-sm overflow-hidden">
-        <div className="p-4 border-b bg-muted/30">
-          <h3 className="font-semibold text-sm">Transações Recentes</h3>
+      {/* BARRA DE FERRAMENTAS */}
+      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="Buscar por cliente ou número da venda..."
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            className="pl-10 border-slate-200 focus:border-[#34BFBF] focus:ring-[#34BFBF]"
+          />
         </div>
+      </div>
 
-        {vendas.length === 0 ? (
-          <div className="p-10 text-center text-muted-foreground">
-            Nenhuma venda registrada ainda. Abra o PDV para começar.
-          </div>
-        ) : (
-          <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 border-b">
-              <tr>
-                <th className="h-10 px-4 font-medium text-muted-foreground">ID</th>
-                <th className="h-10 px-4 font-medium text-muted-foreground">Cliente</th>
-                <th className="h-10 px-4 font-medium text-muted-foreground">Data/Hora</th>
-                <th className="h-10 px-4 font-medium text-muted-foreground">Forma Pagto</th>
-                <th className="h-10 px-4 font-medium text-muted-foreground">Valor</th>
-                <th className="h-10 px-4 font-medium text-muted-foreground text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {vendas.map((venda) => (
-                <tr key={venda.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="p-4 font-bold text-xs text-muted-foreground">#{venda.id}</td>
-                  <td className="p-4 font-medium">{venda.cliente || "Consumidor Final"}</td>
-                  <td className="p-4 text-muted-foreground">
-                    {new Date(venda.data).toLocaleString("pt-BR")}
-                  </td>
-                  <td className="p-4">{venda.metodo}</td>
-                  <td className="p-4 font-bold text-emerald-600">
-                    {venda.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </td>
-                  <td className="p-4 text-right">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </td>
+      {/* LISTAGEM */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+            <thead>
+                <tr className="bg-[#F2F2F2] border-b border-slate-200">
+                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Venda</th>
+                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Cliente</th>
+                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Data</th>
+                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Pagamento</th>
+                <th className="px-6 py-4 text-right font-bold text-slate-600 uppercase tracking-wider text-xs">Total</th>
+                <th className="px-6 py-4 text-center font-bold text-slate-600 uppercase tracking-wider text-xs">Ações</th>
                 </tr>
-              ))}
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+                {vendasFiltradas.length === 0 ? (
+                <tr>
+                    <td colSpan="6" className="px-6 py-12 text-center text-slate-400">
+                    <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                    Nenhuma venda encontrada.
+                    </td>
+                </tr>
+                ) : (
+                vendasFiltradas.map((venda) => (
+                    <tr key={venda.id} className="group hover:bg-[#34BFBF]/5 transition-colors">
+                    <td className="px-6 py-4 font-mono text-xs text-slate-500">
+                        #{venda.id}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-700">
+                        {venda.cliente}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 text-xs flex items-center gap-2">
+                        <Calendar className="h-3 w-3" />
+                        {new Date(venda.data).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4">
+                        <span className="bg-slate-50 px-2 py-1 rounded border border-slate-100 text-xs font-medium text-slate-600 uppercase">
+                            {venda.metodo}
+                        </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-bold text-[#F22998]">
+                        {(venda.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-[#34BFBF] border-slate-200 hover:bg-[#34BFBF] hover:text-white hover:border-[#34BFBF]"
+                            onClick={() => setVendaSelecionada(venda)}
+                        >
+                            <Printer className="mr-2 h-3 w-3" /> Ver Cupom
+                        </Button>
+                    </td>
+                    </tr>
+                ))
+                )}
             </tbody>
-          </table>
-        )}
+            </table>
+        </div>
       </div>
     </div>
   );

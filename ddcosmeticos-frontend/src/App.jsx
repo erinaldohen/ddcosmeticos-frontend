@@ -1,62 +1,68 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AppLayout } from "@/components/layout/AppLayout";
-import Login from "@/pages/login";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext"; // <--- Importamos o Contexto
 
-// Módulos
+// Layout
+import { AppLayout } from "@/components/layout/AppLayout";
+
+// Páginas
 import Dashboard from "@/pages/Dashboard";
-import Produtos from "@/pages/Produtos";
-import ProdutoFormulario from "@/pages/Produtos/Formulario";
-import Clientes from "@/pages/Clientes";
-import ClienteFormulario from "@/pages/Clientes/Formulario";
 import Vendas from "@/pages/Vendas";
 import PDV from "@/pages/Vendas/PDV";
+import Produtos from "@/pages/Produtos";
+import NovoProduto from "@/pages/Produtos/NovoProduto";
+import Clientes from "@/pages/Clientes";
 import Financeiro from "@/pages/Financeiro";
-import Relatorios from "@/pages/Relatorios"; // <--- ESTE IMPORT É ESSENCIAL
+import Relatorios from "@/pages/Relatorios";
+import Configuracoes from "@/pages/Configuracoes";
 import Importacao from "@/pages/Configuracoes/Importacao";
-import Configuracoes from "@/pages/Configuracoes"; // Importa o index.jsx que acabamos de criar
+import Login from "@/pages/Login"; // <--- Nova Página
 
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Rota Pública (Login) */}
-        <Route path="/" element={<Login />} />
-        <Route path="/login" element={<Login />} />
+// --- COMPONENTE DE ROTA PROTEGIDA ---
+// Se não estiver logado, redireciona para /login
+function PrivateRoute({ children }) {
+  const { signed, loading } = useAuth();
 
-        {/* Rotas Protegidas (Sistema) */}
-        <Route element={<AppLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+  }
 
-          {/* Produtos */}
-          <Route path="/produtos" element={<Produtos />} />
-          <Route path="/produtos/novo" element={<ProdutoFormulario />} />
-          <Route path="/produtos/editar/:id" element={<ProdutoFormulario />} />
-
-          {/* Clientes */}
-          <Route path="/clientes" element={<Clientes />} />
-          <Route path="/clientes/novo" element={<ClienteFormulario />} />
-          <Route path="/clientes/editar/:id" element={<ClienteFormulario />} />
-
-          {/* Vendas & PDV */}
-          <Route path="/vendas" element={<Vendas />} />
-          <Route path="/vendas/pdv" element={<PDV />} />
-
-          {/* Financeiro */}
-          <Route path="/financeiro" element={<Financeiro />} />
-
-          {/* Relatórios (A rota que estava faltando) */}
-          <Route path="/relatorios" element={<Relatorios />} />
-
-          {/* Configurações */}
-          <Route path="/configuracoes" element={<Configuracoes />} />
-          <Route path="/configuracoes/importacao" element={<Importacao />} />
-        </Route>
-
-        {/* Qualquer outra rota desconhecida joga para o Login */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  return signed ? children : <Navigate to="/login" />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+
+          {/* Rota Pública */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Rotas Protegidas (Dentro do Layout) */}
+          <Route path="/" element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+
+            {/* Redireciona a raiz para o dashboard */}
+            <Route index element={<Navigate to="/dashboard" replace />} />
+
+            <Route path="dashboard" element={<Dashboard />} />
+
+            <Route path="vendas" element={<Vendas />} />
+            <Route path="vendas/pdv" element={<PDV />} />
+
+            <Route path="produtos" element={<Produtos />} />
+            <Route path="produtos/novo" element={<NovoProduto />} />
+            <Route path="produtos/editar/:id" element={<NovoProduto />} />
+
+            <Route path="clientes" element={<Clientes />} />
+            <Route path="financeiro" element={<Financeiro />} />
+            <Route path="relatorios" element={<Relatorios />} />
+
+            <Route path="configuracoes" element={<Configuracoes />} />
+            <Route path="configuracoes/importacao" element={<Importacao />} />
+          </Route>
+
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}

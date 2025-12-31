@@ -1,189 +1,192 @@
 import { useState, useEffect } from "react";
-import {
-  ArrowUpCircle, ArrowDownCircle, DollarSign,
-  Plus, Calendar, CheckCircle2, XCircle, Trash2
-} from "lucide-react";
+import { Plus, Wallet, ArrowUpCircle, ArrowDownCircle, Trash2, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { db } from "@/services/db";
 
 export default function Financeiro() {
-  const [lancamentos, setLancamentos] = useState([]);
-  const [abaAtiva, setAbaAtiva] = useState("resumo"); // resumo, despesas, receitas
-  const [novoItem, setNovoItem] = useState({ descricao: "", valor: "", vencimento: "", tipo: "DESPESA" });
-  const [formAberto, setFormAberto] = useState(false);
+  const [transacoes, setTransacoes] = useState([]);
+  const [resumo, setResumo] = useState({ receitas: 0, despesas: 0, saldo: 0 });
+  const [novaTransacao, setNovaTransacao] = useState({ descricao: "", valor: "", tipo: "entrada", data: "" });
+  const [filtroTipo, setFiltroTipo] = useState("todos");
 
   useEffect(() => {
-    carregarDados();
+    atualizarDados();
   }, []);
 
-  const carregarDados = () => {
-    setLancamentos(db.getFinanceiro());
+  const atualizarDados = () => {
+    const dados = db.getFinanceiro();
+    setTransacoes(dados.sort((a,b) => new Date(b.data) - new Date(a.data)));
+
+    const rec = dados.filter(t => t.tipo === 'entrada').reduce((acc, t) => acc + Number(t.valor), 0);
+    const desp = dados.filter(t => t.tipo === 'saida').reduce((acc, t) => acc + Number(t.valor), 0);
+    setResumo({ receitas: rec, despesas: desp, saldo: rec - desp });
   };
 
   const handleSalvar = (e) => {
     e.preventDefault();
-    if (!novoItem.descricao || !novoItem.valor) return;
+    if (!novaTransacao.descricao || !novaTransacao.valor) return;
 
-    db.salvarLancamento({
-        ...novoItem,
-        valor: Number(novoItem.valor.replace(',', '.'))
+    db.salvarTransacao({
+        ...novaTransacao,
+        valor: Number(novaTransacao.valor),
+        data: novaTransacao.data || new Date().toISOString()
     });
-
-    setNovoItem({ descricao: "", valor: "", vencimento: "", tipo: "DESPESA" });
-    setFormAberto(false);
-    carregarDados();
+    setNovaTransacao({ descricao: "", valor: "", tipo: "entrada", data: "" });
+    atualizarDados();
   };
 
-  const toggleStatus = (id) => {
-    db.atualizarStatusFinanceiro(id);
-    carregarDados();
-  };
-
-  const excluir = (id) => {
-    if(confirm("Excluir este lançamento?")) {
-        db.removerLancamento(id);
-        carregarDados();
+  const handleExcluir = (id) => {
+    if(confirm("Excluir transação?")) {
+        db.excluirTransacao(id);
+        atualizarDados();
     }
   };
 
-  // Cálculos
-  const totalReceitas = lancamentos.filter(l => l.tipo === 'RECEITA').reduce((acc, l) => acc + l.valor, 0);
-  const totalDespesas = lancamentos.filter(l => l.tipo === 'DESPESA').reduce((acc, l) => acc + l.valor, 0);
-  const saldo = totalReceitas - totalDespesas;
-
-  // Filtragem por Aba
-  const listaExibicao = abaAtiva === 'resumo'
-    ? lancamentos
-    : lancamentos.filter(l => l.tipo === (abaAtiva === 'receitas' ? 'RECEITA' : 'DESPESA'));
+  const listaFiltrada = filtroTipo === 'todos' ? transacoes : transacoes.filter(t => t.tipo === filtroTipo);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
 
-      {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* CABEÇALHO */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
-            <DollarSign className="h-8 w-8" /> Financeiro
+          <h1 className="text-3xl font-bold tracking-tight text-[#34BFBF] flex items-center gap-2">
+            <Wallet className="h-8 w-8" /> Financeiro
           </h1>
-          <p className="text-muted-foreground mt-1">Controle de Contas a Pagar e Receber.</p>
-        </div>
-        <div className="flex gap-2 bg-muted p-1 rounded-lg">
-            <button onClick={() => setAbaAtiva("resumo")} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${abaAtiva === 'resumo' ? 'bg-white shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'}`}>Visão Geral</button>
-            <button onClick={() => setAbaAtiva("despesas")} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${abaAtiva === 'despesas' ? 'bg-white shadow-sm text-red-600' : 'text-muted-foreground hover:text-foreground'}`}>A Pagar</button>
-            <button onClick={() => setAbaAtiva("receitas")} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${abaAtiva === 'receitas' ? 'bg-white shadow-sm text-emerald-600' : 'text-muted-foreground hover:text-foreground'}`}>A Receber</button>
+          <p className="text-slate-500">Controle de caixa e despesas.</p>
         </div>
       </div>
 
-      {/* Cards de Totais */}
-      {abaAtiva === 'resumo' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-card p-6 rounded-xl border shadow-sm flex items-center justify-between">
+      {/* CARDS DE RESUMO */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="p-6 bg-white rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex justify-between items-start">
                 <div>
-                    <p className="text-sm font-medium text-muted-foreground">Entradas</p>
-                    <h2 className="text-2xl font-bold text-emerald-600">R$ {totalReceitas.toFixed(2)}</h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Receitas</p>
+                    <h3 className="text-2xl font-bold text-[#34BFBF] mt-1">
+                        {resumo.receitas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </h3>
                 </div>
-                <ArrowUpCircle className="h-10 w-10 text-emerald-100 bg-emerald-600 rounded-full p-2" />
-            </div>
-            <div className="bg-card p-6 rounded-xl border shadow-sm flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium text-muted-foreground">Saídas</p>
-                    <h2 className="text-2xl font-bold text-red-600">R$ {totalDespesas.toFixed(2)}</h2>
-                </div>
-                <ArrowDownCircle className="h-10 w-10 text-red-100 bg-red-600 rounded-full p-2" />
-            </div>
-            <div className={`bg-card p-6 rounded-xl border shadow-sm flex items-center justify-between ${saldo >= 0 ? 'bg-emerald-50/50' : 'bg-red-50/50'}`}>
-                <div>
-                    <p className="text-sm font-medium text-muted-foreground">Saldo Previsto</p>
-                    <h2 className={`text-2xl font-bold ${saldo >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {saldo.toFixed(2)}</h2>
-                </div>
-                <DollarSign className="h-10 w-10 text-primary" />
+                <div className="p-2 bg-[#34BFBF]/10 rounded-lg text-[#34BFBF]"><ArrowUpCircle className="h-5 w-5"/></div>
             </div>
         </div>
-      )}
-
-      {/* Botão Novo Lançamento */}
-      <div className="flex justify-end">
-        <Button onClick={() => setFormAberto(!formAberto)} className={formAberto ? "bg-red-500 hover:bg-red-600" : ""}>
-            {formAberto ? <><XCircle className="mr-2 h-4 w-4"/> Cancelar</> : <><Plus className="mr-2 h-4 w-4"/> Novo Lançamento</>}
-        </Button>
+        <div className="p-6 bg-white rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex justify-between items-start">
+                <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Despesas</p>
+                    <h3 className="text-2xl font-bold text-red-500 mt-1">
+                        {resumo.despesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </h3>
+                </div>
+                <div className="p-2 bg-red-50 rounded-lg text-red-500"><ArrowDownCircle className="h-5 w-5"/></div>
+            </div>
+        </div>
+        <div className="p-6 bg-white rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex justify-between items-start">
+                <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Saldo Atual</p>
+                    <h3 className={`text-2xl font-bold mt-1 ${resumo.saldo >= 0 ? 'text-[#F22998]' : 'text-red-600'}`}>
+                        {resumo.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </h3>
+                </div>
+                <div className={`p-2 rounded-lg ${resumo.saldo >= 0 ? 'bg-[#F22998]/10 text-[#F22998]' : 'bg-red-50 text-red-600'}`}>
+                    <Wallet className="h-5 w-5"/>
+                </div>
+            </div>
+        </div>
       </div>
 
-      {/* Formulário Rápido */}
-      {formAberto && (
-        <form onSubmit={handleSalvar} className="bg-card border p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4 items-end animate-in slide-in-from-top-2">
-            <div className="md:col-span-2 space-y-1">
-                <label className="text-xs font-semibold">Descrição</label>
-                <input required placeholder="Ex: Conta de Luz" className="w-full h-9 px-3 rounded-md border text-sm"
-                    value={novoItem.descricao} onChange={e => setNovoItem({...novoItem, descricao: e.target.value})} />
-            </div>
-            <div className="space-y-1">
-                <label className="text-xs font-semibold">Valor (R$)</label>
-                <input required placeholder="0,00" className="w-full h-9 px-3 rounded-md border text-sm"
-                    value={novoItem.valor} onChange={e => setNovoItem({...novoItem, valor: e.target.value})} />
-            </div>
-            <div className="space-y-1">
-                <label className="text-xs font-semibold">Tipo</label>
-                <select className="w-full h-9 px-3 rounded-md border text-sm"
-                    value={novoItem.tipo} onChange={e => setNovoItem({...novoItem, tipo: e.target.value})}>
-                    <option value="DESPESA">Saída (Pagar)</option>
-                    <option value="RECEITA">Entrada (Receber)</option>
-                </select>
-            </div>
-            <div className="space-y-1">
-                <label className="text-xs font-semibold">Vencimento</label>
-                <input type="date" className="w-full h-9 px-3 rounded-md border text-sm"
-                    value={novoItem.vencimento} onChange={e => setNovoItem({...novoItem, vencimento: e.target.value})} />
-            </div>
-            <Button type="submit" className="w-full h-9 font-bold bg-emerald-600 hover:bg-emerald-700">Salvar</Button>
-        </form>
-      )}
+      <div className="grid lg:grid-cols-3 gap-6">
 
-      {/* Tabela de Lançamentos */}
-      <div className="bg-card border rounded-lg shadow-sm overflow-hidden">
-        <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 border-b">
-                <tr>
-                    <th className="h-10 px-4 font-medium text-muted-foreground">Data</th>
-                    <th className="h-10 px-4 font-medium text-muted-foreground">Descrição</th>
-                    <th className="h-10 px-4 font-medium text-muted-foreground">Categoria</th>
-                    <th className="h-10 px-4 font-medium text-muted-foreground">Valor</th>
-                    <th className="h-10 px-4 font-medium text-muted-foreground">Status</th>
-                    <th className="h-10 px-4 text-right">Ações</th>
-                </tr>
-            </thead>
-            <tbody className="divide-y">
-                {listaExibicao.map((item) => (
-                    <tr key={item.id} className="hover:bg-muted/30">
-                        <td className="p-4 flex items-center gap-2">
-                            {item.tipo === 'RECEITA' ? <ArrowUpCircle className="h-4 w-4 text-emerald-500"/> : <ArrowDownCircle className="h-4 w-4 text-red-500"/>}
-                            {item.vencimento ? new Date(item.vencimento).toLocaleDateString('pt-BR') : '-'}
-                        </td>
-                        <td className="p-4 font-medium">{item.descricao}</td>
-                        <td className="p-4 text-muted-foreground">{item.categoria || 'Geral'}</td>
-                        <td className={`p-4 font-bold ${item.tipo === 'RECEITA' ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </td>
-                        <td className="p-4">
-                            <button onClick={() => toggleStatus(item.id)}
-                                className={`px-2 py-1 rounded-full text-xs font-bold border transition-all
-                                ${item.status === 'PAGO'
-                                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200'
-                                    : 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200'}`}>
-                                {item.status === 'PAGO' ? 'CONCLUÍDO' : 'PENDENTE'}
+        {/* FORMULÁRIO */}
+        <div className="lg:col-span-1">
+            <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm sticky top-6">
+                <h3 className="font-bold text-lg mb-4 text-slate-800">Nova Transação</h3>
+                <form onSubmit={handleSalvar} className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Descrição</label>
+                        <Input value={novaTransacao.descricao} onChange={e => setNovaTransacao({...novaTransacao, descricao: e.target.value})} placeholder="Ex: Conta de Luz" className="focus:border-[#F22998]"/>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Valor (R$)</label>
+                        <Input type="number" step="0.01" value={novaTransacao.valor} onChange={e => setNovaTransacao({...novaTransacao, valor: e.target.value})} placeholder="0,00" className="focus:border-[#F22998]"/>
+                    </div>
+                    <div>
+                         <label className="text-xs font-bold text-slate-500 uppercase">Tipo</label>
+                         <div className="grid grid-cols-2 gap-2 mt-1">
+                            <button type="button" onClick={() => setNovaTransacao({...novaTransacao, tipo: 'entrada'})}
+                                className={`p-2 rounded-lg text-sm font-bold border transition-all ${novaTransacao.tipo === 'entrada' ? 'bg-[#34BFBF] text-white border-[#34BFBF]' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+                                Entrada
                             </button>
-                        </td>
-                        <td className="p-4 text-right">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-600" onClick={() => excluir(item.id)}>
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </td>
-                    </tr>
+                            <button type="button" onClick={() => setNovaTransacao({...novaTransacao, tipo: 'saida'})}
+                                className={`p-2 rounded-lg text-sm font-bold border transition-all ${novaTransacao.tipo === 'saida' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+                                Saída
+                            </button>
+                         </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Data (Opcional)</label>
+                        <Input type="date" value={novaTransacao.data} onChange={e => setNovaTransacao({...novaTransacao, data: e.target.value})} className="focus:border-[#F22998]"/>
+                    </div>
+                    <Button type="submit" className="w-full bg-[#F22998] hover:bg-[#d91e85] text-white font-bold shadow-lg shadow-[#F22998]/20">
+                        <Plus className="mr-2 h-4 w-4"/> Adicionar
+                    </Button>
+                </form>
+            </div>
+        </div>
+
+        {/* LISTA DE TRANSAÇÕES */}
+        <div className="lg:col-span-2 space-y-4">
+            <div className="flex gap-2 pb-2 overflow-x-auto">
+                {['todos', 'entrada', 'saida'].map(tipo => (
+                    <button
+                        key={tipo}
+                        onClick={() => setFiltroTipo(tipo)}
+                        className={`px-4 py-2 rounded-full text-sm font-bold capitalize transition-colors ${
+                            filtroTipo === tipo
+                            ? 'bg-[#34BFBF] text-white'
+                            : 'bg-white text-slate-500 border border-slate-200 hover:text-[#34BFBF]'
+                        }`}
+                    >
+                        {tipo === 'todos' ? 'Todas' : tipo}
+                    </button>
                 ))}
-            </tbody>
-        </table>
-        {listaExibicao.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground">Nenhum lançamento encontrado.</div>
-        )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                {listaFiltrada.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400">Nenhuma transação encontrada.</div>
+                ) : (
+                    <div className="divide-y divide-slate-100">
+                        {listaFiltrada.map((item) => (
+                            <div key={item.id} className="p-4 flex items-center justify-between hover:bg-[#F2F2F2] transition-colors group">
+                                <div className="flex items-center gap-4">
+                                    <div className={`h-10 w-10 rounded-full flex items-center justify-center ${item.tipo === 'entrada' ? 'bg-[#34BFBF]/10 text-[#34BFBF]' : 'bg-red-50 text-red-500'}`}>
+                                        {item.tipo === 'entrada' ? <ArrowUpCircle className="h-5 w-5"/> : <ArrowDownCircle className="h-5 w-5"/>}
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800">{item.descricao}</p>
+                                        <p className="text-xs text-slate-400 flex items-center gap-1">
+                                            <Calendar className="h-3 w-3"/> {new Date(item.data).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className={`font-bold ${item.tipo === 'entrada' ? 'text-[#34BFBF]' : 'text-red-500'}`}>
+                                        {item.tipo === 'saida' && '- '}{Number(item.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleExcluir(item.id)}>
+                                        <Trash2 className="h-4 w-4"/>
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+
       </div>
     </div>
   );

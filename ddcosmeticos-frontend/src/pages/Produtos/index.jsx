@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Plus, Search, FileEdit, Trash2, Package } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Search, Edit, Trash2, Package } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { db } from "@/services/db";
 
 export default function Produtos() {
@@ -10,100 +11,133 @@ export default function Produtos() {
   const [busca, setBusca] = useState("");
 
   useEffect(() => {
-    // Carrega produtos e garante que a lista não seja nula
-    const lista = db.getProdutos() || [];
+    // Carrega e garante que estoque e preço sejam números para evitar erros
+    const lista = db.getProdutos().map(p => ({
+        ...p,
+        preco: Number(p.preco) || 0,
+        estoque: Number(p.estoque) || 0
+    }));
     setProdutos(lista);
   }, []);
 
   const handleDelete = (id) => {
-    // window.confirm é mais seguro que apenas confirm
-    if (window.confirm("Tem certeza que deseja excluir este produto?")) {
-      const novaLista = db.deletarProduto(id);
-      setProdutos(novaLista);
+    if (confirm("Tem certeza que deseja excluir este produto?")) {
+      db.excluirProduto(id);
+      // Recarrega a lista
+      setProdutos(db.getProdutos().map(p => ({
+          ...p,
+          preco: Number(p.preco) || 0,
+          estoque: Number(p.estoque) || 0
+      })));
     }
   };
 
   const produtosFiltrados = produtos.filter(p =>
     (p.nome && p.nome.toLowerCase().includes(busca.toLowerCase())) ||
-    (p.codigo && p.codigo.includes(busca))
+    (p.codigo && p.codigo.toLowerCase().includes(busca.toLowerCase()))
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+
+      {/* CABEÇALHO */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
+          <h1 className="text-3xl font-bold tracking-tight text-[#34BFBF] flex items-center gap-2">
             <Package className="h-8 w-8" /> Produtos
           </h1>
-          <p className="text-muted-foreground mt-1">Gerencie seu catálogo completo.</p>
+          <p className="text-slate-500">Gerencie seu catálogo de estoque.</p>
         </div>
-        <Button onClick={() => navigate("/produtos/novo")} className="shadow-md font-bold">
+
+        <Button
+            onClick={() => navigate("/produtos/novo")}
+            className="bg-[#F22998] hover:bg-[#d91e85] text-white font-bold shadow-lg shadow-[#F22998]/20"
+        >
           <Plus className="mr-2 h-4 w-4" /> Novo Produto
         </Button>
       </div>
 
-      <div className="bg-card p-4 rounded-lg border shadow-sm flex gap-4">
+      {/* BARRA DE BUSCA */}
+      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <input
+          <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+          <Input
             placeholder="Buscar por nome ou código..."
-            className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={e => setBusca(e.target.value)}
+            className="pl-10 border-slate-200 focus:border-[#34BFBF] focus:ring-[#34BFBF]"
           />
+        </div>
+        <div className="text-sm text-slate-500 font-medium bg-[#F2F2F2] px-4 py-2 rounded-lg border border-slate-200">
+            Total: <span className="text-[#34BFBF] font-bold">{produtos.length}</span> itens
         </div>
       </div>
 
-      <div className="bg-card border rounded-lg shadow-sm overflow-hidden">
+      {/* LISTAGEM */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 border-b">
-              <tr>
-                <th className="h-12 px-4 font-medium text-muted-foreground">Produto</th>
-                <th className="h-12 px-4 font-medium text-muted-foreground">Código</th>
-                <th className="h-12 px-4 font-medium text-muted-foreground">Preço</th>
-                <th className="h-12 px-4 font-medium text-muted-foreground">Estoque</th>
-                <th className="h-12 px-4 font-medium text-muted-foreground text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {produtosFiltrados.map((prod) => (
-                <tr key={prod.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="p-4 font-medium">{prod.nome || "Produto sem nome"}</td>
-                  <td className="p-4 text-muted-foreground">{prod.codigo || "-"}</td>
-                  <td className="p-4">
-                    {/* PROTEÇÃO AQUI: (prod.preco || 0) evita o erro de null */}
-                    {(prod.preco || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </td>
-                  <td className="p-4">
-                     <span className={(prod.estoque || 0) < 5 ? "text-red-600 font-bold" : ""}>
-                        {prod.estoque || 0} un
-                     </span>
-                  </td>
-                  <td className="p-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                       <Button
-                         variant="ghost"
-                         size="icon"
-                         className="h-8 w-8 text-blue-600"
-                         onClick={() => navigate(`/produtos/editar/${prod.id}`)}
-                       >
-                         <FileEdit className="h-4 w-4" />
-                       </Button>
-                       <Button
-                         variant="ghost"
-                         size="icon"
-                         className="h-8 w-8 text-red-500 hover:bg-red-50"
-                         onClick={() => handleDelete(prod.id)}
-                       >
-                         <Trash2 className="h-4 w-4" />
-                       </Button>
-                    </div>
-                  </td>
+            <table className="w-full text-sm">
+            <thead>
+                <tr className="bg-[#F2F2F2] border-b border-slate-200">
+                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Produto</th>
+                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Código</th>
+                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Preço</th>
+                <th className="px-6 py-4 text-center font-bold text-slate-600 uppercase tracking-wider text-xs">Estoque</th>
+                <th className="px-6 py-4 text-right font-bold text-slate-600 uppercase tracking-wider text-xs">Ações</th>
                 </tr>
-              ))}
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+                {produtosFiltrados.length === 0 ? (
+                <tr>
+                    <td colSpan="5" className="px-6 py-12 text-center text-slate-400">
+                    <Package className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                    Nenhum produto encontrado.
+                    </td>
+                </tr>
+                ) : (
+                produtosFiltrados.map((prod) => (
+                    <tr key={prod.id} className="group hover:bg-[#34BFBF]/5 transition-colors">
+                    <td className="px-6 py-4 font-medium text-slate-700">{prod.nome}</td>
+                    <td className="px-6 py-4 text-slate-500 font-mono text-xs">
+                        <span className="bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                            {prod.codigo || "-"}
+                        </span>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-[#F22998]">
+                        {/* AQUI ESTAVA O ERRO: Adicionei proteção contra valores nulos */}
+                        {(Number(prod.preco) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                            (Number(prod.estoque) || 0) <= 5
+                            ? 'bg-red-50 text-red-600 border border-red-100'
+                            : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                        }`}>
+                            {prod.estoque} un
+                        </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                            <Link to={`/produtos/editar/${prod.id}`}>
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-[#34BFBF] hover:bg-[#34BFBF]/10 hover:text-[#34BFBF]">
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                            </Link>
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDelete(prod.id)}
+                                className="h-8 w-8 text-red-400 hover:bg-red-50 hover:text-red-600"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </td>
+                    </tr>
+                ))
+                )}
             </tbody>
-          </table>
+            </table>
         </div>
       </div>
     </div>
