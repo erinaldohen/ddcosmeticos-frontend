@@ -1,264 +1,286 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft, Search, Trash2, Plus, Minus, CreditCard,
-  Banknote, CheckCircle2, ShoppingBag
-} from "lucide-react";
+import { Search, Plus, Trash2, ShoppingCart, CreditCard, Check, User, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ComprovanteModal } from "@/components/vendas/ComprovanteModal";
+import { Input } from "@/components/ui/input";
 import { db } from "@/services/db";
+import { Cupom } from "@/components/Impressao/Cupom";
 
 export default function PDV() {
-  const navigate = useNavigate();
-
-  // Estados
-  const [catalogo, setCatalogo] = useState([]);
-  const [listaClientes, setListaClientes] = useState([]);
-  const [carrinho, setCarrinho] = useState([]);
   const [busca, setBusca] = useState("");
-  const [cliente, setCliente] = useState("");
+  const [carrinho, setCarrinho] = useState([]);
+  const [cliente, setCliente] = useState("Consumidor Final");
+  const [pagamento, setPagamento] = useState("Dinheiro");
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [dadosVendaFinalizada, setDadosVendaFinalizada] = useState(null);
+  const [produtos, setProdutos] = useState([]);
+  const [clientesLista, setClientesLista] = useState([]);
+  const [produtosFiltrados, setProdutosFiltrados] = useState([]);
+  const [vendaConcluida, setVendaConcluida] = useState(null);
 
-  // Carrega dados com proteção contra falhas
   useEffect(() => {
-    try {
-      const prods = db.getProdutos() || [];
-      const clis = db.getClientes() || [];
-      setCatalogo(prods);
-      setListaClientes(clis);
-    } catch (error) {
-      console.error("Erro ao carregar PDV:", error);
-    }
+    // Carrega produtos garantindo que preço seja número
+    const prods = db.getProdutos().map(p => ({
+        ...p,
+        preco: Number(p.preco) || 0,
+        estoque: Number(p.estoque) || 0
+    }));
+    setProdutos(prods);
+    setClientesLista(db.getClientes());
   }, []);
 
-  // Adicionar item
+  useEffect(() => {
+    if (busca.trim() === "") {
+      setProdutosFiltrados([]);
+    } else {
+      const termo = busca.toLowerCase();
+      const filtrados = produtos.filter(p =>
+        (p.nome && p.nome.toLowerCase().includes(termo)) ||
+        (p.codigo && p.codigo.toLowerCase().includes(termo))
+      );
+      setProdutosFiltrados(filtrados.slice(0, 5));
+    }
+  }, [busca, produtos]);
+
   const adicionarAoCarrinho = (produto) => {
-    const estoqueAtual = Number(produto.estoque || 0);
+    if (produto.estoque <= 0) {
+      alert("Produto sem estoque físico!");
+      return;
+    }
 
-    if (estoqueAtual <= 0) return alert("Produto sem estoque!");
+    const itemExistente = carrinho.find(item => item.id === produto.id);
 
-    setCarrinho((prev) => {
-      const itemExistente = prev.find((item) => item.id === produto.id);
-      if (itemExistente) {
-        if (itemExistente.qtd + 1 > estoqueAtual) {
-          alert("Estoque insuficiente!");
-          return prev;
-        }
-        return prev.map((item) =>
-          item.id === produto.id ? { ...item, qtd: item.qtd + 1 } : item
-        );
+    if (itemExistente) {
+      if (itemExistente.qtd + 1 > produto.estoque) {
+        alert("Quantidade solicitada maior que o estoque!");
+        return;
       }
-      return [...prev, { ...produto, qtd: 1 }];
-    });
+      setCarrinho(carrinho.map(item =>
+        item.id === produto.id ? { ...item, qtd: item.qtd + 1 } : item
+      ));
+    } else {
+      setCarrinho([...carrinho, { ...produto, qtd: 1 }]);
+    }
+    setBusca("");
+    setProdutosFiltrados([]); // Limpa a busca após adicionar
   };
 
   const removerDoCarrinho = (id) => {
-    setCarrinho((prev) => prev.filter((item) => item.id !== id));
+    setCarrinho(carrinho.filter(item => item.id !== id));
   };
 
-  const alterarQtd = (id, delta) => {
-    setCarrinho((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          return { ...item, qtd: Math.max(1, item.qtd + delta) };
-        }
-        return item;
-      })
-    );
+  const calcularTotal = () => {
+    return carrinho.reduce((acc, item) => acc + (item.preco * item.qtd), 0);
   };
 
-  // Cálculo seguro do subtotal (evita NaN)
-  const subtotal = carrinho.reduce((acc, item) => {
-    const preco = Number(item.preco || 0);
-    return acc + (preco * item.qtd);
-  }, 0);
-
-  const finalizarVenda = (metodoPagamento) => {
-    if (carrinho.length === 0) return;
+  const finalizarVenda = () => {
+    if (carrinho.length === 0) {
+      alert("O carrinho está vazio!");
+      return;
+    }
 
     const venda = {
+      cliente,
       itens: carrinho,
-      total: subtotal,
-      metodo: metodoPagamento,
-      cliente: cliente || "Consumidor Final",
+      total: calcularTotal(),
+      metodo: pagamento,
+      desconto: 0,
+      data: new Date().toISOString()
     };
 
-    try {
-      const vendaSalva = db.salvarVenda(venda);
-      setDadosVendaFinalizada({ ...vendaSalva, clienteNome: venda.cliente });
-      setModalOpen(true);
-    } catch (error) {
-      alert("Erro ao salvar venda: " + error.message);
-    }
+    const vendaSalva = db.salvarVenda(venda);
+
+    // Atualiza estoque localmente
+    const produtosAtualizados = produtos.map(p => {
+        const itemVendido = carrinho.find(i => i.id === p.id);
+        if(itemVendido) return { ...p, estoque: p.estoque - itemVendido.qtd };
+        return p;
+    });
+    setProdutos(produtosAtualizados);
+    setVendaConcluida(vendaSalva);
   };
 
-  const resetarPDV = () => {
+  const fecharCupomEResetar = () => {
+    setVendaConcluida(null);
     setCarrinho([]);
-    setCliente("");
+    setCliente("Consumidor Final");
+    setPagamento("Dinheiro");
     setBusca("");
-    setModalOpen(false);
-    // Recarrega catálogo
-    setCatalogo(db.getProdutos());
   };
 
-  const produtosFiltrados = catalogo.filter(p =>
-    (p.nome && p.nome.toLowerCase().includes(busca.toLowerCase())) ||
-    (p.codigo && p.codigo.toLowerCase().includes(busca.toLowerCase()))
-  );
+  const total = calcularTotal();
 
   return (
-    <>
-      <div className="h-[calc(100vh-100px)] flex flex-col lg:flex-row gap-6">
+    <div className="h-[calc(100vh-100px)] flex flex-col md:flex-row gap-4 animate-in fade-in duration-500">
 
-        {/* CATÁLOGO (ESQUERDA) */}
-        <div className="flex-1 flex flex-col gap-4">
-          <div className="flex gap-4">
-            <Button variant="outline" size="icon" onClick={() => navigate("/vendas")}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <input
-                autoFocus
-                placeholder="Buscar produto (Nome ou Cód)..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                className="flex h-11 w-full rounded-xl border border-input bg-card px-10 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
+      {vendaConcluida && (
+        <Cupom venda={vendaConcluida} onClose={fecharCupomEResetar} />
+      )}
 
-          <div className="flex-1 bg-muted/20 rounded-xl p-4 overflow-y-auto border border-dashed border-muted-foreground/20">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {produtosFiltrados.map((prod) => {
-                // Proteção de variáveis
-                const preco = Number(prod.preco || 0);
-                const estoque = Number(prod.estoque || 0);
-                const semEstoque = estoque <= 0;
+      {/* LADO ESQUERDO: BUSCA E LISTAGEM */}
+      <div className="flex-1 flex flex-col gap-4">
 
-                return (
-                  <button
+        {/* Barra de Busca */}
+        <div className="bg-white p-4 rounded-xl border shadow-sm relative z-20">
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <Search className="h-5 w-5 text-emerald-600"/> Buscar Produtos
+          </h2>
+          <div className="relative">
+            <Input
+              placeholder="Digite nome ou código de barras..."
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              className="pl-4 h-12 text-lg"
+              autoFocus
+            />
+            {/* Dropdown de Resultados */}
+            {produtosFiltrados.length > 0 && (
+              <div className="absolute top-full left-0 right-0 bg-white border rounded-b-xl shadow-xl mt-1 overflow-hidden">
+                {produtosFiltrados.map(prod => (
+                  <div
                     key={prod.id}
                     onClick={() => adicionarAoCarrinho(prod)}
-                    disabled={semEstoque}
-                    className={`bg-card p-4 rounded-xl border shadow-sm transition-all text-left flex flex-col justify-between h-40 group relative
-                      ${semEstoque ? 'opacity-60 cursor-not-allowed bg-muted' : 'hover:ring-2 hover:ring-primary hover:scale-[1.02]'}`}
+                    className="p-3 hover:bg-emerald-50 cursor-pointer border-b last:border-0 flex justify-between items-center group"
                   >
                     <div>
-                      <div className="font-semibold text-sm line-clamp-2 mb-1 group-hover:text-primary transition-colors">
-                        {prod.nome || "Produto sem nome"}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Cód: {prod.codigo || "-"}</div>
+                      <div className="font-bold text-slate-800">{prod.nome}</div>
+                      <div className="text-xs text-muted-foreground">Cód: {prod.codigo || 'S/C'} | Estoque: {prod.estoque}</div>
                     </div>
-
-                    <div className="flex justify-between items-end mt-2">
-                      <div className="font-bold text-lg text-primary">
-                        {preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </div>
-                      <div className={`text-xs px-2 py-0.5 rounded-full font-bold
-                         ${estoque <= 2 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>
-                         {estoque} un
-                      </div>
+                    <div className="font-bold text-emerald-600 group-hover:scale-110 transition-transform">
+                      {/* PROTEÇÃO CONTRA ERRO TOFIXED */}
+                      R$ {(Number(prod.preco) || 0).toFixed(2)}
                     </div>
-                  </button>
-                );
-              })}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* CARRINHO (DIREITA) */}
-        <div className="w-full lg:w-[400px] bg-card border rounded-xl shadow-lg flex flex-col h-full">
-          <div className="p-5 border-b bg-primary text-primary-foreground rounded-t-xl">
-            <h2 className="font-bold text-lg flex items-center gap-2">
-              <ShoppingBag className="h-5 w-5" /> Carrinho
-            </h2>
-          </div>
-
-          <div className="p-4 border-b bg-muted/10">
-              <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">Cliente</label>
-              <select
-                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                value={cliente}
-                onChange={(e) => setCliente(e.target.value)}
-              >
-                <option value="">Consumidor Final (Sem cadastro)</option>
-                {listaClientes.map((c) => (
-                  <option key={c.id} value={c.nome}>
-                    {c.nome}
-                  </option>
-                ))}
-              </select>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {carrinho.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
-                <ShoppingBag className="h-12 w-12 mb-2" />
-                <p>Caixa Livre</p>
-              </div>
-            ) : (
-              carrinho.map((item) => {
-                const precoItem = Number(item.preco || 0);
-                return (
-                  <div key={item.id} className="flex items-center gap-3 bg-muted/20 p-3 rounded-lg border">
-                    <div className="flex-1">
-                      <div className="text-sm font-medium line-clamp-1">{item.nome}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {precoItem.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} un.
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-background rounded-md border px-1 h-8">
-                      <button onClick={() => alterarQtd(item.id, -1)} className="p-1 hover:text-primary"><Minus className="h-3 w-3"/></button>
-                      <span className="text-xs font-bold w-4 text-center">{item.qtd}</span>
-                      <button onClick={() => alterarQtd(item.id, 1)} className="p-1 hover:text-primary"><Plus className="h-3 w-3"/></button>
-                    </div>
-                    <div className="text-sm font-bold w-16 text-right">
-                      {(precoItem * item.qtd).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </div>
-                    <button onClick={() => removerDoCarrinho(item.id)} className="text-red-400 hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
+        {/* Sugestões Rápidas */}
+        <div className="flex-1 bg-white p-4 rounded-xl border shadow-sm overflow-y-auto">
+            <h3 className="font-bold text-sm text-muted-foreground uppercase mb-3">Atalhos Rápidos</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                {produtos.slice(0, 9).map(prod => (
+                    <button
+                        key={prod.id}
+                        disabled={prod.estoque <= 0}
+                        onClick={() => adicionarAoCarrinho(prod)}
+                        className="p-3 border rounded-lg hover:border-emerald-500 hover:bg-emerald-50 transition-all text-left flex flex-col justify-between h-24 disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-border group"
+                    >
+                        <span className="font-medium text-sm line-clamp-2 leading-tight group-hover:text-emerald-900">{prod.nome}</span>
+                        <div className="flex justify-between items-end mt-2 w-full">
+                            <span className="font-bold text-emerald-700 text-sm">
+                                {/* PROTEÇÃO CONTRA ERRO TOFIXED */}
+                                R$ {(Number(prod.preco) || 0).toFixed(2)}
+                            </span>
+                            {prod.estoque <= 0 ? (
+                                <AlertCircle className="h-4 w-4 text-red-400" />
+                            ) : (
+                                <Plus className="h-5 w-5 text-emerald-600 bg-emerald-100 rounded-full p-0.5" />
+                            )}
+                        </div>
                     </button>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="p-6 bg-muted/10 border-t space-y-4">
-            <div className="flex justify-between items-end">
-              <span className="text-muted-foreground font-medium">Total</span>
-              <span className="text-3xl font-bold text-primary">
-                {subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </span>
+                ))}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" className="h-14 flex-col gap-1 text-xs" onClick={() => finalizarVenda("Dinheiro")}>
-                <Banknote className="h-4 w-4"/> Dinheiro
-              </Button>
-              <Button variant="outline" className="h-14 flex-col gap-1 text-xs" onClick={() => finalizarVenda("Cartão")}>
-                <CreditCard className="h-4 w-4"/> Cartão
-              </Button>
-            </div>
-            <Button
-              className="w-full h-12 text-lg font-bold shadow-lg"
-              onClick={() => finalizarVenda("PIX")}
-              disabled={carrinho.length === 0}
-            >
-              <CheckCircle2 className="mr-2 h-5 w-5" /> PIX / Finalizar
-            </Button>
-          </div>
         </div>
       </div>
 
-      <ComprovanteModal
-        open={modalOpen}
-        dadosVenda={dadosVendaFinalizada}
-        onClose={() => setModalOpen(false)}
-        onNovaVenda={resetarPDV}
-      />
-    </>
+      {/* LADO DIREITO: CARRINHO */}
+      <div className="w-full md:w-[400px] bg-white flex flex-col border-l shadow-2xl z-10 h-full fixed right-0 top-0 md:relative md:h-auto md:rounded-xl md:border">
+        <div className="p-4 bg-emerald-600 text-white flex justify-between items-center md:rounded-t-xl">
+            <h2 className="font-bold text-lg flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5"/> Caixa
+            </h2>
+            <span className="bg-emerald-700 px-2 py-1 rounded text-sm font-bold shadow-sm">
+                {carrinho.reduce((acc, i) => acc + i.qtd, 0)} itens
+            </span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+            {carrinho.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                    <ShoppingCart className="h-16 w-16 mb-4 opacity-20"/>
+                    <p className="font-medium">Caixa Livre</p>
+                    <p className="text-sm">Aguardando produtos...</p>
+                </div>
+            ) : (
+                carrinho.map(item => (
+                    <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-lg border shadow-sm animate-in slide-in-from-right-5">
+                        <div className="flex-1">
+                            <div className="font-medium text-sm text-slate-800 line-clamp-1">{item.nome}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                                {item.qtd}x R$ {(Number(item.preco)||0).toFixed(2)}
+                            </div>
+                        </div>
+                        <div className="text-right mx-3">
+                            <div className="font-bold text-slate-700">
+                                R$ {((item.qtd * (Number(item.preco)||0))).toFixed(2)}
+                            </div>
+                        </div>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full"
+                            onClick={() => removerDoCarrinho(item.id)}
+                        >
+                            <Trash2 className="h-4 w-4"/>
+                        </Button>
+                    </div>
+                ))
+            )}
+        </div>
+
+        {/* Checkout */}
+        <div className="bg-white p-4 border-t space-y-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Cliente</label>
+                <select
+                    className="w-full p-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:border-emerald-500 outline-none"
+                    value={cliente}
+                    onChange={e => setCliente(e.target.value)}
+                >
+                    <option value="Consumidor Final">Consumidor Final</option>
+                    {clientesLista.map(c => (
+                        <option key={c.id} value={c.nome}>{c.nome}</option>
+                    ))}
+                </select>
+            </div>
+
+            <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Pagamento</label>
+                <div className="grid grid-cols-3 gap-2">
+                    {['Dinheiro', 'PIX', 'Crédito', 'Débito', 'Crediário'].map(metodo => (
+                        <button
+                            key={metodo}
+                            onClick={() => setPagamento(metodo)}
+                            className={`px-1 py-2 text-xs font-semibold rounded-lg border transition-all ${
+                                pagamento === metodo
+                                ? 'bg-slate-800 text-white border-slate-800 shadow-md transform scale-105'
+                                : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                            }`}
+                        >
+                            {metodo}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="pt-2">
+                <div className="flex justify-between items-end mb-4">
+                    <span className="text-slate-500 font-medium text-sm">Total a Pagar</span>
+                    <span className="text-3xl font-bold text-emerald-600 tracking-tight">
+                        {total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}
+                    </span>
+                </div>
+                <Button
+                    className="w-full h-12 text-lg font-bold bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 active:scale-95 transition-all"
+                    onClick={finalizarVenda}
+                    disabled={carrinho.length === 0}
+                >
+                    <Check className="mr-2 h-5 w-5" /> Finalizar Venda
+                </Button>
+            </div>
+        </div>
+      </div>
+    </div>
   );
 }
