@@ -9,10 +9,11 @@ export function Cupom({ venda, onClose }) {
     endereco: "Endereço não configurado",
     telefone: ""
   });
-  const [larguraPapel, setLarguraPapel] = useState("58mm"); // 58mm ou 80mm
+
+  // Define a largura REAL do papel, mas usaremos uma largura "SEGURA" interna
+  const [tipoPapel, setTipoPapel] = useState("58mm");
 
   useEffect(() => {
-    // Carrega dados da loja configurados
     const saved = localStorage.getItem("dd-config-loja");
     if (saved) setLoja(JSON.parse(saved));
   }, []);
@@ -23,136 +24,161 @@ export function Cupom({ venda, onClose }) {
 
   const handleShare = () => {
     if (navigator.share) {
-      const texto = `
-*COMPROVANTE DE VENDA - ${loja.nome}*
---------------------------------
-Data: ${new Date(venda.data).toLocaleString()}
-Pedido: #${venda.id}
---------------------------------
-Total: ${venda.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
---------------------------------
-Obrigado pela preferência!
-      `;
       navigator.share({
         title: `Cupom #${venda.id}`,
-        text: texto
+        text: `Pedido #${venda.id} - R$ ${venda.total}`
       }).catch(console.error);
     } else {
-      alert("Compartilhamento não suportado neste navegador/dispositivo.");
+      alert("Função indisponível.");
     }
   };
+
+  // Lógica de Largura Segura (Para não cortar as laterais)
+  // 80mm -> Usamos 72mm de conteúdo
+  // 58mm -> Usamos 48mm de conteúdo
+  const larguraConteudo = tipoPapel === "80mm" ? "72mm" : "48mm";
+  const tamanhoFonte = tipoPapel === "80mm" ? "12px" : "11px";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
 
-      {/* CSS DE IMPRESSÃO INJETADO DINAMICAMENTE */}
       <style>{`
         @media print {
-            @page { margin: 0; size: auto; }
-            body * { visibility: hidden; }
-
-            #area-cupom, #area-cupom * {
-                visibility: visible;
+            /* ZERA TODAS AS MARGENS DA PÁGINA PARA ECONOMIZAR PAPEL */
+            @page {
+                size: auto;
+                margin: 0mm;
             }
-            #area-cupom {
+
+            body {
+                margin: 0;
+                padding: 0;
+            }
+
+            /* Oculta tudo que não é cupom */
+            body * {
+                visibility: hidden;
+                height: 0;
+                overflow: hidden;
+            }
+
+            /* Mostra e posiciona o cupom */
+            #printable-content, #printable-content * {
+                visibility: visible;
+                height: auto;
+                overflow: visible;
+            }
+
+            #printable-content {
                 position: absolute;
                 left: 0;
                 top: 0;
-                width: ${larguraPapel};
-                margin: 0;
-                padding: 10px; /* Margem de segurança da impressora */
+                /* Largura segura para evitar corte lateral */
+                width: ${larguraConteudo} !important;
+                margin: 0 !important;
+                padding: 0 !important;
                 background: white;
-                color: black;
-                font-family: 'Courier New', Courier, monospace; /* Fonte Térmica */
-                font-size: 12px;
-                line-height: 1.2;
             }
 
-            /* Remove fundos coloridos para economizar tinta */
-            .no-print-color {
-                background: transparent !important;
-                color: black !important;
-                border: none !important;
-                box-shadow: none !important;
+            /* FORÇA CONTRASTE MÁXIMO PARA IMPRESSORA TÉRMICA */
+            * {
+                color: #000000 !important; /* Preto puro */
+                font-family: 'Courier New', Courier, monospace !important; /* Fonte monoespaçada */
+                font-weight: 700 !important; /* Negrito forçado para legibilidade */
+                text-transform: uppercase !important; /* Maiúsculas são mais legíveis */
             }
 
-            /* Esconde botões de ação na impressão */
-            .actions-bar { display: none !important; }
+            /* Remove tons de cinza ou bordas fracas */
+            .text-slate-500, .text-slate-400 {
+                color: #000000 !important;
+            }
+            .border-dashed {
+                border-color: #000000 !important;
+                border-width: 1px !important;
+            }
         }
       `}</style>
 
+      {/* MODAL NA TELA (INTERFACE) */}
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
 
-        {/* BARRA DE AÇÕES (NÃO IMPRIME) */}
-        <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center actions-bar">
+        {/* HEADER (Não imprime) */}
+        <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center no-print" style={{visibility: 'visible', height: 'auto'}}>
             <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                <Printer className="h-4 w-4 text-[#34BFBF]"/> Imprimir Cupom
+                <Printer className="h-4 w-4 text-[#34BFBF]"/> Impressão Térmica
             </h3>
             <Button size="icon" variant="ghost" onClick={onClose} className="hover:bg-red-50 hover:text-red-500 rounded-full h-8 w-8">
                 <X className="h-4 w-4"/>
             </Button>
         </div>
 
-        {/* CONTROLES (NÃO IMPRIME) */}
-        <div className="p-4 flex gap-2 justify-center bg-white border-b border-slate-100 actions-bar">
+        {/* CONTROLES (Não imprime) */}
+        <div className="p-3 flex justify-center bg-white border-b border-slate-100 no-print" style={{visibility: 'visible', height: 'auto'}}>
              <div className="flex bg-slate-100 p-1 rounded-lg">
                 <button
-                    onClick={() => setLarguraPapel("58mm")}
-                    className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${larguraPapel === "58mm" ? "bg-white shadow text-slate-800" : "text-slate-400"}`}
+                    onClick={() => setTipoPapel("58mm")}
+                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${tipoPapel === "58mm" ? "bg-white shadow text-[#F22998]" : "text-slate-400"}`}
                 >
-                    58mm
+                    58mm (Pequeno)
                 </button>
                 <button
-                    onClick={() => setLarguraPapel("80mm")}
-                    className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${larguraPapel === "80mm" ? "bg-white shadow text-slate-800" : "text-slate-400"}`}
+                    onClick={() => setTipoPapel("80mm")}
+                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${tipoPapel === "80mm" ? "bg-white shadow text-[#F22998]" : "text-slate-400"}`}
                 >
-                    80mm
+                    80mm (Padrão)
                 </button>
              </div>
         </div>
 
-        {/* ÁREA DO CUPOM (PREVIEW & PRINT) */}
-        <div className="flex-1 overflow-y-auto bg-slate-200 p-6 flex justify-center">
+        {/* ÁREA DE CONTEÚDO */}
+        <div className="flex-1 overflow-y-auto bg-slate-200 p-8 flex justify-center" style={{visibility: 'visible', height: 'auto'}}>
 
-            {/* O PAPEL TÉRMICO SIMULADO */}
+            {/* --- CUPOM REAL --- */}
             <div
-                id="area-cupom"
-                className="bg-white shadow-sm transition-all origin-top"
+                id="printable-content"
+                className="bg-white shadow-sm"
                 style={{
-                    width: larguraPapel,
-                    minHeight: '200px',
-                    padding: '15px',
-                    fontFamily: "'Courier New', Courier, monospace", // Fonte monoespaçada estilo impressora
-                    fontSize: '12px',
-                    color: '#000'
+                    width: larguraConteudo,
+                    // Estilos visuais para a tela (simulação)
+                    fontFamily: "'Courier New', Courier, monospace",
+                    fontSize: tamanhoFonte,
+                    lineHeight: '1.1',
+                    color: '#000',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase',
+                    padding: '2px' // Padding mínimo na tela
                 }}
             >
                 {/* CABEÇALHO */}
-                <div className="text-center mb-4 leading-tight">
-                    <h2 className="font-bold text-lg uppercase mb-1">{loja.nome}</h2>
-                    <p className="text-[10px]">{loja.endereco}</p>
-                    <p className="text-[10px]">CNPJ: {loja.cnpj}</p>
-                    {loja.telefone && <p className="text-[10px]">Tel: {loja.telefone}</p>}
-                    <p className="border-b border-black border-dashed my-2"></p>
-                    <p className="font-bold">CUPOM NÃO FISCAL</p>
-                    <p className="text-[10px]">#{venda.id} - {new Date(venda.data).toLocaleString()}</p>
+                <div className="text-center mb-2">
+                    <h2 className="text-sm font-black mb-1">{loja.nome}</h2>
+                    <p className="text-[10px] leading-tight">{loja.endereco}</p>
+                    <p className="text-[10px]">CNPJ:{loja.cnpj}</p>
+                    {loja.telefone && <p className="text-[10px]">Tel:{loja.telefone}</p>}
+
+                    <div className="border-b border-dashed border-black my-1"></div>
+
+                    <div className="flex justify-between text-[10px]">
+                        <span>#{venda.id}</span>
+                        <span>{new Date(venda.data).toLocaleDateString()} {new Date(venda.data).toLocaleTimeString().slice(0,5)}</span>
+                    </div>
                 </div>
 
                 {/* ITENS */}
-                <div className="mb-4">
-                    <div className="flex font-bold border-b border-black border-dashed pb-1 mb-1 text-[10px]">
-                        <span className="flex-1">ITEM</span>
+                <div className="mb-2">
+                    <div className="flex border-b border-dashed border-black pb-1 mb-1 text-[10px]">
+                        <span className="flex-1 text-left">ITEM</span>
                         <span className="w-8 text-center">QTD</span>
-                        <span className="w-14 text-right">VALOR</span>
+                        <span className="w-14 text-right">TOT</span>
                     </div>
                     {venda.itens.map((item, i) => (
-                        <div key={i} className="mb-1 text-[11px] leading-tight">
-                            <div className="font-bold truncate">{item.nome}</div>
+                        <div key={i} className="mb-1 text-[10px]">
+                            <div className="truncate text-left w-full">{item.nome}</div>
                             <div className="flex justify-between">
-                                <span>{item.codigo || '-'}</span>
-                                <div className="flex gap-2">
-                                    <span>{item.qtd}x {Number(item.preco).toFixed(2)}</span>
-                                    <span className="font-bold w-14 text-right">
+                                <span className="text-[9px]">{item.codigo || '.'}</span>
+                                <div className="flex gap-1">
+                                    <span>{item.qtd}x{Number(item.preco).toFixed(2)}</span>
+                                    <span className="w-14 text-right">
                                         {(item.qtd * item.preco).toFixed(2)}
                                     </span>
                                 </div>
@@ -162,51 +188,49 @@ Obrigado pela preferência!
                 </div>
 
                 {/* TOTAIS */}
-                <div className="border-t border-black border-dashed pt-2 mb-4">
-                    <div className="flex justify-between font-bold text-sm">
+                <div className="border-t border-dashed border-black pt-1 mb-2">
+                    <div className="flex justify-between text-sm font-black mb-1">
                         <span>TOTAL</span>
                         <span>{venda.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                     </div>
-                    <div className="flex justify-between text-xs mt-1">
-                        <span>Pagamento:</span>
-                        <span className="uppercase">{venda.metodo}</span>
+                    <div className="flex justify-between text-[10px]">
+                        <span>PAGAMENTO</span>
+                        <span>{venda.metodo}</span>
                     </div>
-                    {venda.cliente !== "Consumidor Final" && (
-                        <div className="flex justify-between text-xs mt-1">
-                            <span>Cliente:</span>
-                            <span>{venda.cliente}</span>
+                    {venda.cliente && venda.cliente !== "Consumidor Final" && (
+                        <div className="flex justify-between text-[10px] mt-1">
+                            <span>CLIENTE</span>
+                            <span className="text-right truncate max-w-[120px]">{venda.cliente}</span>
                         </div>
                     )}
                 </div>
 
-                {/* RODAPÉ */}
-                <div className="text-center text-[10px] mt-6">
-                    <p>Obrigado pela preferência!</p>
-                    <p className="mt-1">Volte Sempre.</p>
-                    <p className="border-t border-black border-dashed mt-4 pt-2 text-[9px] text-slate-400">
-                        Sistema DD Cosméticos
-                    </p>
+                {/* RODAPÉ ECONÔMICO */}
+                <div className="text-center text-[9px] mt-2 pb-0">
+                    <p>OBRIGADO PELA PREFERENCIA!</p>
+                    <p className="mt-1">*** NAO E DOCUMENTO FISCAL ***</p>
                 </div>
 
-                {/* Linha de Corte (Visual apenas) */}
-                <div className="flex items-center gap-2 mt-4 text-slate-300 actions-bar justify-center">
+                {/* Linha de Corte (Aparece só na tela) */}
+                <div className="flex items-center gap-2 mt-4 text-slate-300 no-print justify-center" style={{visibility: 'visible'}}>
                     <Scissors className="h-3 w-3" />
                     <span className="text-[9px] border-b border-dashed border-slate-300 w-full"></span>
                 </div>
-
             </div>
+            {/* --- FIM CUPOM --- */}
+
         </div>
 
-        {/* BOTÕES DE AÇÃO DO RODAPÉ (NÃO IMPRIME) */}
-        <div className="p-4 bg-white border-t border-slate-100 flex gap-3 actions-bar">
+        {/* RODAPÉ MODAL (Não imprime) */}
+        <div className="p-4 bg-white border-t border-slate-100 flex gap-3 no-print" style={{visibility: 'visible', height: 'auto'}}>
             <Button onClick={handleShare} variant="outline" className="flex-1 border-slate-200 text-slate-600">
-                <Share2 className="mr-2 h-4 w-4" /> Compartilhar
+                <Share2 className="mr-2 h-4 w-4" /> Enviar
             </Button>
             <Button
                 onClick={handlePrint}
-                className="flex-1 bg-[#F22998] hover:bg-[#d91e85] text-white font-bold shadow-lg shadow-[#F22998]/20"
+                className="flex-1 bg-[#F22998] hover:bg-[#d91e85] text-white font-bold"
             >
-                <Printer className="mr-2 h-4 w-4" /> Imprimir Agora
+                <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
         </div>
 
