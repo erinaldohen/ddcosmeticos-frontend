@@ -1,239 +1,181 @@
 import { useEffect, useState } from "react";
-import { Printer, X, Scissors, Share2 } from "lucide-react";
+import { Printer, X, ShoppingBag, MessageCircle, Share2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function Cupom({ venda, onClose }) {
   const [loja, setLoja] = useState({
     nome: "DD Cosméticos",
     cnpj: "00.000.000/0001-00",
     endereco: "Endereço não configurado",
-    telefone: ""
+    telefone: "(00) 0000-0000"
   });
 
-  // Define a largura REAL do papel, mas usaremos uma largura "SEGURA" interna
   const [tipoPapel, setTipoPapel] = useState("58mm");
+  const [whatsappCliente, setWhatsappCliente] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("dd-config-loja");
     if (saved) setLoja(JSON.parse(saved));
   }, []);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = () => window.print();
+
+  // --- FORMATAÇÃO DA MENSAGEM ---
+  const montarMensagem = () => {
+    const textoItens = venda.itens
+      .map(i => {
+        const unitario = Number(i.preco).toFixed(2);
+        const subtotal = (i.qtd * i.preco).toFixed(2);
+        return `• ${i.nome}\n  ${i.qtd} un x R$ ${unitario} = R$ ${subtotal}`;
+      })
+      .join('\n\n');
+
+    return `*${loja.nome}*\n` +
+      `*RECIBO DE VENDA Nº ${venda.id?.toString().slice(-6)}*\n` +
+      `----------------------------\n` +
+      `${textoItens}\n` +
+      `----------------------------\n` +
+      `*TOTAL: R$ ${venda.total.toFixed(2)}*\n` +
+      `Pagamento: ${venda.metodo}\n` +
+      `Data: ${new Date(venda.data).toLocaleString()}\n\n` +
+      `*NÃO É DOCUMENTO FISCAL*\n` +
+      `Obrigado pela preferência!`;
   };
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: `Cupom #${venda.id}`,
-        text: `Pedido #${venda.id} - R$ ${venda.total}`
-      }).catch(console.error);
+  // --- FUNÇÃO COMPARTILHAR WHATSAPP (COM OU SEM CONTATO) ---
+  const shareWhatsApp = () => {
+    const mensagem = encodeURIComponent(montarMensagem());
+    const numeroLimpo = whatsappCliente.replace(/\D/g, "");
+
+    if (numeroLimpo) {
+      // Se digitou número, envia direto (wa.me)
+      const numeroFinal = numeroLimpo.startsWith("55") ? numeroLimpo : `55${numeroLimpo}`;
+      window.open(`https://wa.me/${numeroFinal}?text=${mensagem}`, '_blank');
     } else {
-      alert("Função indisponível.");
+      // Se não digitou, abre a lista de contatos para escolher
+      window.open(`https://api.whatsapp.com/send?text=${mensagem}`, '_blank');
     }
   };
 
-  // Lógica de Largura Segura (Para não cortar as laterais)
-  // 80mm -> Usamos 72mm de conteúdo
-  // 58mm -> Usamos 48mm de conteúdo
-  const larguraConteudo = tipoPapel === "80mm" ? "72mm" : "48mm";
-  const tamanhoFonte = tipoPapel === "80mm" ? "12px" : "11px";
+  const shareGeneral = async () => {
+    const texto = montarMensagem();
+    const shareData = { title: `Recibo ${loja.nome}`, text: texto };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        window.location.href = `mailto:?subject=Recibo ${loja.nome}&body=${encodeURIComponent(texto)}`;
+      }
+    } catch (err) { console.log(err); }
+  };
+
+  const larguraRecibo = tipoPapel === "80mm" ? "74mm" : "50mm";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 no-print">
 
       <style>{`
         @media print {
-            /* ZERA TODAS AS MARGENS DA PÁGINA PARA ECONOMIZAR PAPEL */
-            @page {
-                size: auto;
-                margin: 0mm;
-            }
-
-            body {
-                margin: 0;
-                padding: 0;
-            }
-
-            /* Oculta tudo que não é cupom */
-            body * {
-                visibility: hidden;
-                height: 0;
-                overflow: hidden;
-            }
-
-            /* Mostra e posiciona o cupom */
-            #printable-content, #printable-content * {
-                visibility: visible;
-                height: auto;
-                overflow: visible;
-            }
-
-            #printable-content {
-                position: absolute;
-                left: 0;
-                top: 0;
-                /* Largura segura para evitar corte lateral */
-                width: ${larguraConteudo} !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                background: white;
-            }
-
-            /* FORÇA CONTRASTE MÁXIMO PARA IMPRESSORA TÉRMICA */
-            * {
-                color: #000000 !important; /* Preto puro */
-                font-family: 'Courier New', Courier, monospace !important; /* Fonte monoespaçada */
-                font-weight: 700 !important; /* Negrito forçado para legibilidade */
-                text-transform: uppercase !important; /* Maiúsculas são mais legíveis */
-            }
-
-            /* Remove tons de cinza ou bordas fracas */
-            .text-slate-500, .text-slate-400 {
-                color: #000000 !important;
-            }
-            .border-dashed {
-                border-color: #000000 !important;
-                border-width: 1px !important;
-            }
+          body * { visibility: hidden !important; }
+          #area-impressao, #area-impressao * { visibility: visible !important; color: #000 !important; }
+          #area-impressao {
+            position: absolute !important;
+            left: 0 !important; top: 0 !important;
+            width: ${larguraRecibo} !important;
+            padding-right: 8mm !important; padding-left: 1mm !important;
+            margin: 0 !important; background: white !important;
+          }
+          .linha-flex { display: flex !important; justify-content: space-between !important; width: 100% !important; }
+          @page { margin: 0 !important; size: auto; }
         }
       `}</style>
 
-      {/* MODAL NA TELA (INTERFACE) */}
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[95vh]">
 
-        {/* HEADER (Não imprime) */}
-        <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center no-print" style={{visibility: 'visible', height: 'auto'}}>
-            <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                <Printer className="h-4 w-4 text-[#34BFBF]"/> Impressão Térmica
+        <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+            <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase">
+                Opções de Recibo
             </h3>
-            <Button size="icon" variant="ghost" onClick={onClose} className="hover:bg-red-50 hover:text-red-500 rounded-full h-8 w-8">
-                <X className="h-4 w-4"/>
-            </Button>
+            <Button size="icon" variant="ghost" onClick={onClose} className="rounded-full"><X/></Button>
         </div>
 
-        {/* CONTROLES (Não imprime) */}
-        <div className="p-3 flex justify-center bg-white border-b border-slate-100 no-print" style={{visibility: 'visible', height: 'auto'}}>
-             <div className="flex bg-slate-100 p-1 rounded-lg">
-                <button
-                    onClick={() => setTipoPapel("58mm")}
-                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${tipoPapel === "58mm" ? "bg-white shadow text-[#F22998]" : "text-slate-400"}`}
-                >
-                    58mm (Pequeno)
+        <div className="p-2 flex justify-center gap-2 bg-white border-b border-dashed">
+            {["58mm", "80mm"].map((t) => (
+                <button key={t} onClick={() => setTipoPapel(t)} className={`px-4 py-1 text-[11px] font-bold rounded-md border ${tipoPapel === t ? "bg-black text-white" : "text-slate-500 border-slate-200"}`}>
+                    {t}
                 </button>
-                <button
-                    onClick={() => setTipoPapel("80mm")}
-                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${tipoPapel === "80mm" ? "bg-white shadow text-[#F22998]" : "text-slate-400"}`}
-                >
-                    80mm (Padrão)
-                </button>
-             </div>
+            ))}
         </div>
 
-        {/* ÁREA DE CONTEÚDO */}
-        <div className="flex-1 overflow-y-auto bg-slate-200 p-8 flex justify-center" style={{visibility: 'visible', height: 'auto'}}>
-
-            {/* --- CUPOM REAL --- */}
-            <div
-                id="printable-content"
-                className="bg-white shadow-sm"
-                style={{
-                    width: larguraConteudo,
-                    // Estilos visuais para a tela (simulação)
-                    fontFamily: "'Courier New', Courier, monospace",
-                    fontSize: tamanhoFonte,
-                    lineHeight: '1.1',
-                    color: '#000',
-                    fontWeight: 'bold',
-                    textTransform: 'uppercase',
-                    padding: '2px' // Padding mínimo na tela
-                }}
-            >
-                {/* CABEÇALHO */}
-                <div className="text-center mb-2">
-                    <h2 className="text-sm font-black mb-1">{loja.nome}</h2>
-                    <p className="text-[10px] leading-tight">{loja.endereco}</p>
-                    <p className="text-[10px]">CNPJ:{loja.cnpj}</p>
-                    {loja.telefone && <p className="text-[10px]">Tel:{loja.telefone}</p>}
-
-                    <div className="border-b border-dashed border-black my-1"></div>
-
-                    <div className="flex justify-between text-[10px]">
-                        <span>#{venda.id}</span>
-                        <span>{new Date(venda.data).toLocaleDateString()} {new Date(venda.data).toLocaleTimeString().slice(0,5)}</span>
-                    </div>
+        <div className="flex-1 overflow-y-auto bg-slate-200 p-4 flex justify-center">
+            <div id="area-impressao" className="bg-white p-4 shadow-lg" style={{ width: larguraRecibo, fontFamily: "'Courier New', Courier, monospace", textTransform: 'uppercase', color: '#000', fontWeight: '900', lineHeight: '1.2' }}>
+                <div className="text-center mb-1">
+                    <h2 className="text-[14px] font-black">{loja.nome}</h2>
+                    <p className="text-[11px]">{loja.endereco}</p>
+                    <p className="text-[11px]">CNPJ: {loja.cnpj}</p>
                 </div>
-
-                {/* ITENS */}
-                <div className="mb-2">
-                    <div className="flex border-b border-dashed border-black pb-1 mb-1 text-[10px]">
-                        <span className="flex-1 text-left">ITEM</span>
-                        <span className="w-8 text-center">QTD</span>
-                        <span className="w-14 text-right">TOT</span>
-                    </div>
-                    {venda.itens.map((item, i) => (
-                        <div key={i} className="mb-1 text-[10px]">
-                            <div className="truncate text-left w-full">{item.nome}</div>
-                            <div className="flex justify-between">
-                                <span className="text-[9px]">{item.codigo || '.'}</span>
-                                <div className="flex gap-1">
-                                    <span>{item.qtd}x{Number(item.preco).toFixed(2)}</span>
-                                    <span className="w-14 text-right">
-                                        {(item.qtd * item.preco).toFixed(2)}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
+                <div className="border-b-2 border-black mb-1"></div>
+                <div className="text-[11px] space-y-0.5 mb-1">
+                    <div className="linha-flex"><span>Nº DA VENDA:</span><span className="font-black">{venda.id?.toString().slice(-6)}</span></div>
+                    <div className="linha-flex"><span>DATA: {new Date(venda.data).toLocaleDateString()}</span><span>HORA: {new Date(venda.data).toLocaleTimeString()}</span></div>
                 </div>
-
-                {/* TOTAIS */}
-                <div className="border-t border-dashed border-black pt-1 mb-2">
-                    <div className="flex justify-between text-sm font-black mb-1">
-                        <span>TOTAL</span>
-                        <span>{venda.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                    </div>
-                    <div className="flex justify-between text-[10px]">
-                        <span>PAGAMENTO</span>
-                        <span>{venda.metodo}</span>
-                    </div>
-                    {venda.cliente && venda.cliente !== "Consumidor Final" && (
-                        <div className="flex justify-between text-[10px] mt-1">
-                            <span>CLIENTE</span>
-                            <span className="text-right truncate max-w-[120px]">{venda.cliente}</span>
-                        </div>
-                    )}
+                <div className="border-b border-black mb-2"></div>
+                <table className="w-full text-[11px] mb-2 border-collapse">
+                    <tbody>
+                        {venda.itens.map((item, i) => (
+                            <tr key={i} className="border-b border-gray-100">
+                                <td className="py-2 text-left">
+                                    <div className="font-black">{item.nome}</div>
+                                    <div className="text-[10px]">{item.qtd} UN X R$ {Number(item.preco).toFixed(2)}</div>
+                                </td>
+                                <td className="text-right py-2 align-top font-black">{(item.qtd * item.preco).toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                <div className="border-t-2 border-black pt-2 mb-2">
+                    <div className="linha-flex font-black text-[14px]"><span>TOTAL R$</span><span>{venda.total.toFixed(2)}</span></div>
+                    <div className="linha-flex text-[11px] mt-2"><span>FORMA PAGTO:</span><span>{venda.metodo}</span></div>
                 </div>
-
-                {/* RODAPÉ ECONÔMICO */}
-                <div className="text-center text-[9px] mt-2 pb-0">
-                    <p>OBRIGADO PELA PREFERENCIA!</p>
-                    <p className="mt-1">*** NAO E DOCUMENTO FISCAL ***</p>
-                </div>
-
-                {/* Linha de Corte (Aparece só na tela) */}
-                <div className="flex items-center gap-2 mt-4 text-slate-300 no-print justify-center" style={{visibility: 'visible'}}>
-                    <Scissors className="h-3 w-3" />
-                    <span className="text-[9px] border-b border-dashed border-slate-300 w-full"></span>
+                <div className="text-center mt-5 space-y-2">
+                    <p className="text-[11px] font-black">*** OBRIGADO PELA PREFERÊNCIA ***</p>
+                    <p className="text-[10px] border-2 border-black p-1 font-black">NÃO É DOCUMENTO FISCAL</p>
                 </div>
             </div>
-            {/* --- FIM CUPOM --- */}
-
         </div>
 
-        {/* RODAPÉ MODAL (Não imprime) */}
-        <div className="p-4 bg-white border-t border-slate-100 flex gap-3 no-print" style={{visibility: 'visible', height: 'auto'}}>
-            <Button onClick={handleShare} variant="outline" className="flex-1 border-slate-200 text-slate-600">
-                <Share2 className="mr-2 h-4 w-4" /> Enviar
-            </Button>
-            <Button
-                onClick={handlePrint}
-                className="flex-1 bg-[#F22998] hover:bg-[#d91e85] text-white font-bold"
-            >
-                <Printer className="mr-2 h-4 w-4" /> Imprimir
-            </Button>
-        </div>
+        {/* --- AÇÕES --- */}
+        <div className="p-4 bg-white border-t space-y-3">
 
+            {/* Campo WhatsApp Sem Agenda */}
+            <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Enviar p/ WhatsApp (DDD + Número)</label>
+                <div className="flex gap-2">
+                    <Input
+                        placeholder="Ex: 11999999999"
+                        value={whatsappCliente}
+                        onChange={(e) => setWhatsappCliente(e.target.value)}
+                        className="h-10 border-2"
+                        type="tel"
+                    />
+                </div>
+            </div>
+
+            <Button onClick={handlePrint} className="w-full bg-black text-white font-bold h-11 rounded-xl">
+                <Printer className="mr-2 h-5 w-5" /> IMPRIMIR CUPOM
+            </Button>
+
+            <div className="grid grid-cols-2 gap-2">
+                <Button onClick={shareWhatsApp} className="bg-green-600 hover:bg-green-700 text-white font-bold h-11 rounded-xl">
+                    <MessageCircle className="mr-2 h-5 w-5" /> WHATSAPP
+                </Button>
+                <Button onClick={shareGeneral} variant="outline" className="border-2 border-black font-bold h-11 rounded-xl text-black">
+                    <Share2 className="mr-2 h-5 w-5" /> OUTROS
+                </Button>
+            </div>
+        </div>
       </div>
     </div>
   );
