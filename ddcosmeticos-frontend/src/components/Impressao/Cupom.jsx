@@ -11,7 +11,11 @@ export function Cupom({ venda, onClose }) {
     telefone: "(00) 0000-0000"
   });
 
-  const [tipoPapel, setTipoPapel] = useState("58mm");
+  // MEMÓRIA DA IMPRESSORA: Lê o estado inicial do localStorage ou define "58mm" como padrão
+  const [tipoPapel, setTipoPapel] = useState(() => {
+    return localStorage.getItem("dd-tipo-papel") || "58mm";
+  });
+
   const [whatsappCliente, setWhatsappCliente] = useState("");
 
   useEffect(() => {
@@ -19,9 +23,15 @@ export function Cupom({ venda, onClose }) {
     if (saved) setLoja(JSON.parse(saved));
   }, []);
 
+  // FUNÇÃO PARA SALVAR A PREFERÊNCIA: Atualiza o estado e o localStorage
+  const mudarTipoPapel = (t) => {
+    setTipoPapel(t);
+    localStorage.setItem("dd-tipo-papel", t);
+  };
+
   const handlePrint = () => window.print();
 
-  // --- FORMATAÇÃO DA MENSAGEM ---
+  // --- FORMATAÇÃO DA MENSAGEM COM VALOR UNITÁRIO ---
   const montarMensagem = () => {
     const textoItens = venda.itens
       .map(i => {
@@ -49,11 +59,11 @@ export function Cupom({ venda, onClose }) {
     const numeroLimpo = whatsappCliente.replace(/\D/g, "");
 
     if (numeroLimpo) {
-      // Se digitou número, envia direto (wa.me)
+      // Envio direto via wa.me para números não salvos
       const numeroFinal = numeroLimpo.startsWith("55") ? numeroLimpo : `55${numeroLimpo}`;
       window.open(`https://wa.me/${numeroFinal}?text=${mensagem}`, '_blank');
     } else {
-      // Se não digitou, abre a lista de contatos para escolher
+      // Abre lista de contatos
       window.open(`https://api.whatsapp.com/send?text=${mensagem}`, '_blank');
     }
   };
@@ -101,9 +111,16 @@ export function Cupom({ venda, onClose }) {
             <Button size="icon" variant="ghost" onClick={onClose} className="rounded-full"><X/></Button>
         </div>
 
+        {/* SELEÇÃO DE PAPEL COM PERSISTÊNCIA */}
         <div className="p-2 flex justify-center gap-2 bg-white border-b border-dashed">
             {["58mm", "80mm"].map((t) => (
-                <button key={t} onClick={() => setTipoPapel(t)} className={`px-4 py-1 text-[11px] font-bold rounded-md border ${tipoPapel === t ? "bg-black text-white" : "text-slate-500 border-slate-200"}`}>
+                <button
+                    key={t}
+                    onClick={() => mudarTipoPapel(t)}
+                    className={`px-4 py-1 text-[11px] font-bold rounded-md border transition-colors ${
+                      tipoPapel === t ? "bg-black text-white" : "text-slate-500 border-slate-200 hover:bg-slate-50"
+                    }`}
+                >
                     {t}
                 </button>
             ))}
@@ -146,10 +163,7 @@ export function Cupom({ venda, onClose }) {
             </div>
         </div>
 
-        {/* --- AÇÕES --- */}
         <div className="p-4 bg-white border-t space-y-3">
-
-            {/* Campo WhatsApp Sem Agenda */}
             <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">Enviar p/ WhatsApp (DDD + Número)</label>
                 <div className="flex gap-2">
@@ -164,7 +178,7 @@ export function Cupom({ venda, onClose }) {
             </div>
 
             <Button onClick={handlePrint} className="w-full bg-black text-white font-bold h-11 rounded-xl">
-                <Printer className="mr-2 h-5 w-5" /> IMPRIMIR CUPOM
+                <Printer className="mr-2 h-5 w-5" /> IMPRIMIR EM {tipoPapel}
             </Button>
 
             <div className="grid grid-cols-2 gap-2">
