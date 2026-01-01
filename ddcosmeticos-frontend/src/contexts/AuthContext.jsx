@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useContext } from "react";
-import api from "@/services/api";
+import api from "../services/api"; // Certifique-se que o caminho está correto
 
 const AuthContext = createContext();
 
@@ -8,49 +8,45 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Ao iniciar, recupera o token e usuário salvos
     const recoveredUser = localStorage.getItem("dd-user");
     const recoveredToken = localStorage.getItem("dd-token");
 
     if (recoveredUser && recoveredToken) {
       setUser(JSON.parse(recoveredUser));
-      // Configura o token no Axios para as próximas requisições
       api.defaults.headers.Authorization = `Bearer ${recoveredToken}`;
     }
-
     setLoading(false);
   }, []);
 
   const login = async (email, password) => {
     try {
-      // Chamada real ao Backend Java
-      const response = await api.post("/auth/login", {
-        login: email,  // Backend espera "login" (ou email)
-        senha: password // Backend espera "senha"
+      // AQUI ESTÁ A MUDANÇA: Chamada real ao Java
+      const response = await api.post("/api/v1/auth/login", {
+        login: email,    // Backend espera "login"
+        senha: password  // Backend espera "senha"
       });
 
       const { token, nome, perfil } = response.data;
 
-      // Cria objeto do usuário
       const userData = {
         email,
-        name: nome || "Usuário",
-        role: perfil || "CAIXA"
+        name: nome,
+        role: perfil
       };
 
-      // Salva no navegador
       localStorage.setItem("dd-user", JSON.stringify(userData));
       localStorage.setItem("dd-token", token);
 
-      // Configura token para requisições futuras
       api.defaults.headers.Authorization = `Bearer ${token}`;
-
       setUser(userData);
+
+      return true;
 
     } catch (error) {
       console.error("Erro no login:", error);
-      // Retorna o erro para ser exibido no formulário (Toast)
-      throw new Error(error.response?.data?.message || "E-mail ou senha incorretos.");
+      // Pega a mensagem de erro do backend ou define uma padrão
+      const msg = error.response?.data?.message || "Erro ao conectar com o servidor.";
+      throw new Error(msg);
     }
   };
 
@@ -69,9 +65,5 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth deve ser usado dentro de um AuthProvider");
-  }
-  return context;
+  return useContext(AuthContext);
 }

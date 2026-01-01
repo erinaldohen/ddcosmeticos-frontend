@@ -1,14 +1,13 @@
-import axios from 'axios';
+// src/services/api.js
+import axios from "axios";
 
-// Cria a conexão apontando para o seu Backend na porta 8080
 const api = axios.create({
-  baseURL: 'http://192.168.0.6:8080/api/v1',
+  baseURL: "http://localhost:8080", // Endereço do seu Backend Spring Boot
 });
 
-// "Interceptador": Antes de cada pedido, verifica se tem um token salvo
-// Se tiver, anexa o token no cabeçalho para o Java deixar entrar
+// Interceptor para adicionar o token automaticamente em toda requisição
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem("dd-token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
