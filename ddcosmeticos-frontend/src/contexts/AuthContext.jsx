@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect, useContext } from "react";
+import api from "@/services/api";
 
 const AuthContext = createContext();
 
@@ -7,31 +8,56 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verifica se já tem um login salvo ao abrir o sistema
+    // Ao iniciar, recupera o token e usuário salvos
     const recoveredUser = localStorage.getItem("dd-user");
-    if (recoveredUser) {
+    const recoveredToken = localStorage.getItem("dd-token");
+
+    if (recoveredUser && recoveredToken) {
       setUser(JSON.parse(recoveredUser));
+      // Configura o token no Axios para as próximas requisições
+      api.defaults.headers.Authorization = `Bearer ${recoveredToken}`;
     }
+
     setLoading(false);
   }, []);
 
-  const login = (email, password) => {
-    // SIMULAÇÃO DE BACKEND
-    // No futuro, aqui você fará um fetch para o Java
-    return new Promise((resolve, reject) => {
-        if (email === "admin@dd.com" && password === "123456") {
-            const userData = { name: "Administrador", email, role: "admin" };
-            localStorage.setItem("dd-user", JSON.stringify(userData));
-            setUser(userData);
-            resolve(userData);
-        } else {
-            reject(new Error("E-mail ou senha inválidos."));
-        }
-    });
+  const login = async (email, password) => {
+    try {
+      // Chamada real ao Backend Java
+      const response = await api.post("/auth/login", {
+        login: email,  // Backend espera "login" (ou email)
+        senha: password // Backend espera "senha"
+      });
+
+      const { token, nome, perfil } = response.data;
+
+      // Cria objeto do usuário
+      const userData = {
+        email,
+        name: nome || "Usuário",
+        role: perfil || "CAIXA"
+      };
+
+      // Salva no navegador
+      localStorage.setItem("dd-user", JSON.stringify(userData));
+      localStorage.setItem("dd-token", token);
+
+      // Configura token para requisições futuras
+      api.defaults.headers.Authorization = `Bearer ${token}`;
+
+      setUser(userData);
+
+    } catch (error) {
+      console.error("Erro no login:", error);
+      // Retorna o erro para ser exibido no formulário (Toast)
+      throw new Error(error.response?.data?.message || "E-mail ou senha incorretos.");
+    }
   };
 
   const logout = () => {
     localStorage.removeItem("dd-user");
+    localStorage.removeItem("dd-token");
+    api.defaults.headers.Authorization = null;
     setUser(null);
   };
 
@@ -43,5 +69,9 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth deve ser usado dentro de um AuthProvider");
+  }
+  return context;
 }

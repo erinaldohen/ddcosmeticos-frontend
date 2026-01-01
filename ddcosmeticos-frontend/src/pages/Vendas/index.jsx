@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
-import { Plus, ShoppingCart, Search, Printer, Eye, Calendar } from "lucide-react";
+import { Plus, ShoppingCart, Search, Printer, Calendar, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { db } from "@/services/db";
 import { Cupom } from "@/components/Impressao/Cupom";
+import axios from "axios"; // Importamos axios diretamente para evitar o prefixo /api/v1
 
 export default function Vendas() {
   const navigate = useNavigate();
   const [vendas, setVendas] = useState([]);
   const [busca, setBusca] = useState("");
   const [vendaSelecionada, setVendaSelecionada] = useState(null);
+
+  // Estado para controlar qual venda está a emitir nota neste momento
+  const [loadingId, setLoadingId] = useState(null);
 
   useEffect(() => {
     // Carrega e inverte a ordem (mais recentes primeiro)
@@ -21,6 +25,36 @@ export default function Vendas() {
     (v.cliente && v.cliente.toLowerCase().includes(busca.toLowerCase())) ||
     (v.id && v.id.toString().includes(busca))
   );
+
+  // Função para chamar o Backend Java
+  const handleEmitirNfe = async (venda) => {
+    // Inicia o loading apenas para este ID
+    setLoadingId(venda.id);
+
+    try {
+      // Chama a URL direta do seu backend (baseada no IP do seu api.js)
+      // Ajuste o IP aqui se o seu servidor mudar (ex: localhost)
+      const response = await axios.post(`http://192.168.0.6:8080/nfe/emitir/${venda.id}`);
+
+      // Se der certo:
+      const dados = response.data;
+      alert(`✅ Sucesso!\nStatus: ${dados.status} - ${dados.motivo}\nChave: ${dados.chave}`);
+
+      // Opcional: Atualizar a venda localmente para dizer que já tem nota
+      // (Isso exigiria que o db.js suportasse atualização de status)
+
+    } catch (error) {
+      console.error("Erro ao emitir:", error);
+
+      // Tenta pegar a mensagem de erro do backend ou usa uma genérica
+      const mensagemErro = error.response?.data || error.message || "Erro de conexão";
+      alert(`❌ Erro ao emitir NF-e:\n${mensagemErro}`);
+
+    } finally {
+      // Para o loading independente do resultado
+      setLoadingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -105,14 +139,31 @@ export default function Vendas() {
                     <td className="px-6 py-4 text-right font-bold text-[#F22998]">
                         {(venda.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
+                        {/* BOTÃO VER CUPOM */}
                         <Button
                             size="sm"
                             variant="outline"
                             className="text-[#34BFBF] border-slate-200 hover:bg-[#34BFBF] hover:text-white hover:border-[#34BFBF]"
                             onClick={() => setVendaSelecionada(venda)}
                         >
-                            <Printer className="mr-2 h-3 w-3" /> Ver Cupom
+                            <Printer className="mr-2 h-3 w-3" /> Cupom
+                        </Button>
+
+                        {/* BOTÃO NOVO: EMITIR NF-E */}
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-orange-500 border-orange-200 hover:bg-orange-500 hover:text-white hover:border-orange-500"
+                            onClick={() => handleEmitirNfe(venda)}
+                            disabled={loadingId === venda.id} // Desabilita se estiver carregando
+                        >
+                            {loadingId === venda.id ? (
+                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                            ) : (
+                                <FileText className="mr-2 h-3 w-3" />
+                            )}
+                            {loadingId === venda.id ? "Emitindo..." : "NF-e"}
                         </Button>
                     </td>
                     </tr>
