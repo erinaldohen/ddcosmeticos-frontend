@@ -1,184 +1,223 @@
-import { useEffect, useState } from "react";
-import { Plus, Search, Edit, Trash2, Package, RefreshCw } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Plus, Search, Edit, Trash2, Package, RefreshCw, Layers, Tag, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import api from "@/services/api"; // <--- Importando a API Real
+import api from "@/services/api";
 
 export default function Produtos() {
   const navigate = useNavigate();
   const [produtos, setProdutos] = useState([]);
-  const [busca, setBusca] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // Função para carregar dados do Java
-  const carregarProdutos = async () => {
+  // Estado apenas para mostrar "Nenhum resultado para X" e controlar o botão X
+  const [termoExibido, setTermoExibido] = useState("");
+
+  // REFERÊNCIA DIRETA AO INPUT (Evita re-renderizar a cada tecla)
+  const inputRef = useRef(null);
+  const timeoutRef = useRef(null);
+
+  const buscarDados = async (termo = "") => {
     setLoading(true);
     try {
-      // Chama o Backend: GET http://localhost:8080/api/v1/produtos
-      const response = await api.get("/api/v1/produtos");
+      const url = termo ? `/api/v1/produtos?busca=${termo}` : "/api/v1/produtos";
+      const response = await api.get(url);
 
-      // Mapeia os campos do Java para o formato que o React já esperava
       const listaFormatada = response.data.map(p => ({
         id: p.id,
-        nome: p.descricao,              // Java: descricao -> React: nome
-        codigo: p.codigoBarras,         // Java: codigoBarras -> React: codigo
-        preco: Number(p.precoVenda),    // Java: precoVenda -> React: preco
-        estoque: Number(p.quantidadeEmEstoque), // Java: quantidadeEmEstoque -> React: estoque
-        ativo: p.ativo
+        nome: p.descricao || "Sem Descrição",
+        codigo: p.codigoBarras || "---",
+        marca: p.marca || "Genérico",
+        ncm: p.ncm || "S/ NCM",
+        preco: Number(p.precoVenda || 0),
+        estoque: Number(p.quantidadeEmEstoque || 0),
+        ativo: p.ativo !== false
       }));
 
-      // Filtra apenas os ativos (opcional, já que o backend pode trazer inativos)
-      setProdutos(listaFormatada.filter(p => p.ativo));
+      // Se tiver termo de busca, mostra tudo (inclusive inativos se for busca exata)
+      // Se for listagem geral, filtra os ativos
+      if (termo) {
+          setProdutos(listaFormatada);
+      } else {
+          setProdutos(listaFormatada.filter(p => p.ativo));
+      }
 
     } catch (error) {
       console.error("Erro ao buscar produtos:", error);
-      alert("Erro ao carregar produtos. Verifique se o Backend está rodando.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    carregarProdutos();
+    buscarDados();
   }, []);
 
+  // --- LÓGICA OTIMIZADA PARA LEITOR ---
+
+  // Função que realmente dispara a ação
+  const executarBusca = () => {
+    const valor = inputRef.current?.value || "";
+    setTermoExibido(valor); // Atualiza visualmente só agora
+    buscarDados(valor);
+  };
+
+  const handleInputChange = () => {
+    // NÃO chamamos setBusca aqui para não travar a tela.
+    // Apenas reiniciamos o timer.
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+    timeoutRef.current = setTimeout(() => {
+        executarBusca();
+    }, 500);
+  };
+
+  const handleKeyDown = (e) => {
+      // O leitor de código de barras geralmente envia um "Enter" no final.
+      // Isso faz a busca ser instantânea assim que o leitor termina.
+      if (e.key === 'Enter') {
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          executarBusca();
+      }
+  };
+
+  const limparBusca = () => {
+      if (inputRef.current) inputRef.current.value = "";
+      setTermoExibido("");
+      buscarDados("");
+  };
+
   const handleDelete = async (produto) => {
-    if (confirm(`Tem certeza que deseja excluir o produto "${produto.nome}"?`)) {
+    if (confirm(`Tem certeza que deseja excluir "${produto.nome}"?`)) {
       try {
-        // O Controller deleta pelo Código de Barras (EAN)
         await api.delete(`/api/v1/produtos/${produto.codigo}`);
-
-        // Remove da lista visualmente sem precisar recarregar tudo
         setProdutos(prev => prev.filter(p => p.id !== produto.id));
-
       } catch (error) {
-        console.error("Erro ao excluir:", error);
-        alert("Não foi possível excluir o produto.");
+        alert("Erro ao excluir. Verifique se o produto tem vendas vinculadas.");
       }
     }
   };
 
-  const produtosFiltrados = produtos.filter(p =>
-    (p.nome && p.nome.toLowerCase().includes(busca.toLowerCase())) ||
-    (p.codigo && p.codigo.toLowerCase().includes(busca.toLowerCase()))
-  );
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-
-      {/* CABEÇALHO */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#34BFBF] flex items-center gap-2">
-            <Package className="h-8 w-8" /> Produtos
+            <Package className="h-8 w-8" /> Catálogo de Produtos
           </h1>
-          <p className="text-slate-500">Gerencie seu catálogo de estoque.</p>
+          <p className="text-slate-500">Gerencie estoque, preços e dados fiscais.</p>
         </div>
 
         <div className="flex gap-2">
-            <Button
-                variant="outline"
-                onClick={carregarProdutos}
-                disabled={loading}
-                title="Recarregar Lista"
-            >
+            <Button variant="outline" onClick={limparBusca} title="Recarregar">
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
-
-            <Button
-                onClick={() => navigate("/produtos/novo")}
-                className="bg-[#F22998] hover:bg-[#d91e85] text-white font-bold shadow-lg shadow-[#F22998]/20"
-            >
-            <Plus className="mr-2 h-4 w-4" /> Novo Produto
+            <Button onClick={() => navigate("/produtos/novo")} className="bg-[#F22998] hover:bg-[#d91e85] text-white shadow-lg">
+                <Plus className="mr-2 h-4 w-4" /> Novo Produto
             </Button>
         </div>
       </div>
 
-      {/* BARRA DE BUSCA */}
       <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+
+          {/* INPUT OTIMIZADO (NÃO CONTROLADO) */}
           <Input
-            placeholder="Buscar por nome ou código..."
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            className="pl-10 border-slate-200 focus:border-[#34BFBF] focus:ring-[#34BFBF]"
+            ref={inputRef}
+            placeholder="Escaneie o código ou digite o nome..."
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            className="pl-10 border-slate-200 focus:border-[#34BFBF]"
+            autoFocus
+            defaultValue="" // Importante: não usar "value={busca}"
           />
-        </div>
-        <div className="text-sm text-slate-500 font-medium bg-[#F2F2F2] px-4 py-2 rounded-lg border border-slate-200">
-            Total: <span className="text-[#34BFBF] font-bold">{produtos.length}</span> itens
+
+          {termoExibido && (
+              <button
+                onClick={limparBusca}
+                className="absolute right-3 top-3 text-slate-400 hover:text-red-500"
+              >
+                  <X className="h-4 w-4"/>
+              </button>
+          )}
         </div>
       </div>
 
-      {/* LISTAGEM */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
             <div className="p-12 text-center text-slate-500">
-                <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-[#34BFBF]" />
-                Carregando produtos do banco de dados...
+                <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-[#34BFBF]"/>
+                Buscando produtos...
             </div>
         ) : (
         <div className="overflow-x-auto">
             <table className="w-full text-sm">
-            <thead>
-                <tr className="bg-[#F2F2F2] border-b border-slate-200">
-                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Produto</th>
-                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Código</th>
-                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Preço</th>
-                <th className="px-6 py-4 text-center font-bold text-slate-600 uppercase tracking-wider text-xs">Estoque</th>
-                <th className="px-6 py-4 text-right font-bold text-slate-600 uppercase tracking-wider text-xs">Ações</th>
+            <thead className="bg-[#F2F2F2]">
+                <tr className="border-b border-slate-200">
+                    <th className="px-6 py-4 text-left font-bold text-slate-600">Produto</th>
+                    <th className="px-6 py-4 text-left font-bold text-slate-600">Marca / NCM</th>
+                    <th className="px-6 py-4 text-left font-bold text-slate-600">Preço</th>
+                    <th className="px-6 py-4 text-center font-bold text-slate-600">Estoque</th>
+                    <th className="px-6 py-4 text-right font-bold text-slate-600">Ações</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-                {produtosFiltrados.length === 0 ? (
-                <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-slate-400">
-                    <Package className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                    Nenhum produto encontrado.
-                    </td>
-                </tr>
-                ) : (
-                produtosFiltrados.map((prod) => (
-                    <tr key={prod.id} className="group hover:bg-[#34BFBF]/5 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-700">{prod.nome}</td>
-                    <td className="px-6 py-4 text-slate-500 font-mono text-xs">
-                        <span className="bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                            {prod.codigo || "-"}
-                        </span>
-                    </td>
-                    <td className="px-6 py-4 font-bold text-[#F22998]">
-                        {(prod.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                            prod.estoque <= 5
-                            ? 'bg-red-50 text-red-600 border border-red-100'
-                            : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                        }`}>
-                            {prod.estoque} un
-                        </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                            <Link to={`/produtos/editar/${prod.id}`}>
-                                <Button size="icon" variant="ghost" className="h-8 w-8 text-[#34BFBF] hover:bg-[#34BFBF]/10 hover:text-[#34BFBF]">
-                                    <Edit className="h-4 w-4" />
-                                </Button>
-                            </Link>
-                            <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleDelete(prod)}
-                                className="h-8 w-8 text-red-400 hover:bg-red-50 hover:text-red-600"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    </td>
+                {produtos.length === 0 ? (
+                    <tr>
+                        <td colSpan="5" className="p-8 text-center text-slate-500">
+                            Nenhum produto encontrado para "{termoExibido}".
+                        </td>
                     </tr>
-                ))
-                )}
+                ) : (
+                    produtos.map((prod) => (
+                    <tr key={prod.id} className="group hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4">
+                            <div className="font-medium text-slate-700">{prod.nome}</div>
+                            <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                                <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-mono">
+                                    {prod.codigo}
+                                </span>
+                            </div>
+                        </td>
+                        <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1 items-start">
+                                {prod.marca && prod.marca !== "Genérico" && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
+                                        <Layers className="h-3 w-3" /> {prod.marca}
+                                    </span>
+                                )}
+                                <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                                    <Tag className="h-3 w-3" /> {prod.ncm}
+                                </span>
+                            </div>
+                        </td>
+                        <td className="px-6 py-4 font-bold text-[#F22998]">
+                            {prod.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
+                                prod.estoque <= 5
+                                ? 'bg-red-50 text-red-600 border-red-100'
+                                : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                            }`}>
+                                {prod.estoque} un
+                            </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                            <div className="flex justify-end gap-2 opacity-60 group-hover:opacity-100">
+                                <Link to={`/produtos/editar/${prod.id}`}>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-500 hover:bg-blue-50">
+                                        <Edit className="h-4 w-4" />
+                                    </Button>
+                                </Link>
+                                <Button size="icon" variant="ghost" onClick={() => handleDelete(prod)} className="h-8 w-8 text-red-500 hover:bg-red-50">
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </td>
+                    </tr>
+                )))}
             </tbody>
             </table>
         </div>
