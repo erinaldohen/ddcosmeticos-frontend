@@ -1,62 +1,79 @@
 import { useEffect, useState } from "react";
-import api from "@/services/api"; // Usa a API real em vez do db.js
+import api from "@/services/api";
 import {
   TrendingUp, ShoppingBag, AlertTriangle,
-  ArrowDownCircle, ArrowUpCircle, Package, Wallet, Plus, BarChart3
+  ArrowDownCircle, ArrowUpCircle, Package, Wallet, Plus, BarChart3, RefreshCw
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip, CartesianGrid } from "recharts";
+import {
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis,
+  Tooltip, CartesianGrid, Legend
+} from "recharts";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [dados, setDados] = useState(null);
   const [grafico, setGrafico] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [erro, setErro] = useState(null);
 
-  useEffect(() => {
-    async function fetchDashboard() {
-      try {
-        // Busca dados reais do Backend Java
-        const response = await api.get("/dashboard/resumo");
-        const data = response.data;
+  const fetchDashboard = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
-        setDados({
-          faturamentoHoje: data.totalVendidoHoje || 0,
-          qtdPedidosHoje: data.quantidadeVendasHoje || 0,
-          aPagarHoje: data.aPagarHoje || 0,
-          aReceberHoje: data.aReceberHoje || 0,
-          saldoDoDia: data.saldoDoDia || 0,
-          alertasEstoque: data.produtosAbaixoMinimo || 0,
-          totalVencido: data.totalVencidoPagar || 0
-        });
+    try {
+      const response = await api.get("/api/v1/dashboard/resumo");
+      const data = response.data;
 
-        // Adapta a projeção semanal do Java para o gráfico do React
-        if (data.projecaoSemanal) {
-            const chartData = data.projecaoSemanal.map(item => ({
-                name: new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-                saldo: item.saldoPrevisto,
-                entrada: item.aReceber,
-                saida: item.aPagar
-            }));
-            setGrafico(chartData);
-        }
+      setDados({
+        faturamentoHoje: data.totalVendidoHoje || 0,
+        qtdPedidosHoje: data.quantidadeVendasHoje || 0,
+        aPagarHoje: data.aPagarHoje || 0,
+        aReceberHoje: data.aReceberHoje || 0,
+        saldoDoDia: data.saldoDoDia || 0,
+        alertasEstoque: data.produtosAbaixoMinimo || 0,
+        totalVencido: data.totalVencidoPagar || 0
+      });
 
-      } catch (error) {
-        console.error("Erro ao carregar dashboard:", error);
-        setErro("Não foi possível carregar os dados do servidor.");
-      } finally {
-        setLoading(false);
+      if (data.projecaoSemanal) {
+        const chartData = data.projecaoSemanal.map(item => ({
+          name: new Date(item.data).toLocaleDateString('pt-BR', { weekday: 'short' }),
+          saldo: item.saldoPrevisto,
+          entrada: item.aReceber,
+          saida: item.aPagar
+        }));
+        setGrafico(chartData);
       }
+      setErro(null);
+    } catch (error) {
+      console.error("Erro ao carregar dashboard:", error);
+      setErro("Falha na conexão com o servidor.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  };
 
+  useEffect(() => {
     fetchDashboard();
   }, []);
 
-  if (loading) return <div className="p-8 flex items-center gap-2 text-[#F22998]"><div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"></div> Carregando dados reais...</div>;
+  if (loading) return (
+    <div className="h-[80vh] flex flex-col items-center justify-center gap-4">
+      <div className="animate-spin h-10 w-10 border-4 border-[#34BFBF] border-t-transparent rounded-full"></div>
+      <p className="text-slate-500 font-medium tracking-wide">Sincronizando com a DD Cosméticos...</p>
+    </div>
+  );
 
-  if (erro) return <div className="p-8 text-red-500 font-bold">{erro}</div>;
+  if (erro) return (
+    <div className="h-[80vh] flex flex-col items-center justify-center gap-4">
+      <AlertTriangle className="h-12 w-12 text-red-500" />
+      <p className="text-red-500 font-bold">{erro}</p>
+      <Button onClick={() => fetchDashboard()}>Tentar Novamente</Button>
+    </div>
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -64,154 +81,175 @@ export default function Dashboard() {
       {/* 1. CABEÇALHO */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h1 className="text-3xl font-bold tracking-tight text-[#34BFBF]">Visão Geral</h1>
-            <p className="text-slate-500">Resumo da operação em tempo real.</p>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-800">
+                Olá, <span className="text-[#34BFBF]">Administrador</span>
+            </h1>
+            <p className="text-slate-500">Resumo da operação em {new Date().toLocaleDateString('pt-BR')}.</p>
         </div>
         <div className="flex gap-2">
-            <Button onClick={() => navigate("/vendas/pdv")} className="bg-[#F22998] hover:bg-[#d91e85] text-white shadow-md shadow-[#F22998]/20">
-                <ShoppingBag className="mr-2 h-4 w-4"/> Vender (PDV)
+            <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => fetchDashboard(true)}
+                className={refreshing ? "animate-spin" : ""}
+            >
+                <RefreshCw className="h-4 w-4 text-slate-400" />
             </Button>
 
-            <Button
-                variant="outline"
-                onClick={() => navigate("/produtos/novo")}
-                className="border-slate-200 hover:bg-[#F22998] hover:text-white hover:border-[#F22998] transition-all"
-            >
-                <Plus className="mr-2 h-4 w-4"/> Produto
+            <Button onClick={() => navigate("/vendas/pdv")} className="bg-[#F22998] hover:bg-[#d91e85] text-white shadow-lg shadow-[#F22998]/20">
+                <ShoppingBag className="mr-2 h-4 w-4"/> Frente de Caixa (PDV)
             </Button>
 
-            <Button
-                variant="outline"
-                onClick={() => navigate("/financeiro")}
-                className="border-slate-200 hover:bg-[#F22998] hover:text-white hover:border-[#F22998] transition-all"
-            >
-                <Wallet className="mr-2 h-4 w-4"/> Contas
+            <Button variant="outline" onClick={() => navigate("/financeiro")} className="border-slate-200 hover:border-[#34BFBF] hover:text-[#34BFBF]">
+                <Wallet className="mr-2 h-4 w-4"/> Financeiro
             </Button>
         </div>
       </div>
 
-      {/* 2. CARDS */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* 2. CARDS PRINCIPAIS */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
 
           {/* VENDAS HOJE */}
-          <div className="p-6 bg-white rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
+          <div className="group p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
               <div className="flex justify-between items-start">
-                  <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vendas Hoje</p>
-                      <h3 className="text-2xl font-bold text-slate-800 mt-1">
+                  <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Faturamento Hoje</p>
+                      <h3 className="text-2xl font-black text-slate-800">
                         {dados.faturamentoHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </h3>
-                      <p className="text-xs text-slate-500 mt-1">
-                          {dados.qtdPedidosHoje} pedidos realizados
+                      <p className="text-xs text-slate-400 font-medium">
+                          {dados.qtdPedidosHoje} vendas processadas
                       </p>
                   </div>
-                  <div className="p-2 bg-[#F22998]/10 rounded-lg text-[#F22998]">
-                      <ShoppingBag className="h-5 w-5" />
+                  <div className="p-3 bg-emerald-50 rounded-xl text-emerald-500 group-hover:scale-110 transition-transform">
+                      <ShoppingBag className="h-6 w-6" />
                   </div>
               </div>
           </div>
 
           {/* A PAGAR */}
-          <div className="p-6 bg-white rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500 flex flex-col justify-between">
+          <div className={`group p-6 bg-white rounded-2xl border border-slate-100 shadow-sm border-l-4 ${dados.totalVencido > 0 ? 'border-l-red-500' : 'border-l-slate-200'} flex flex-col justify-between`}>
               <div className="flex justify-between items-start">
-                  <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">A Pagar (Hoje)</p>
-                      <h3 className="text-2xl font-bold text-red-600 mt-1">
+                  <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Compromissos (Hoje)</p>
+                      <h3 className="text-2xl font-black text-red-600">
                         {dados.aPagarHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </h3>
                   </div>
-                  <div className="p-2 bg-red-50 rounded-lg text-red-600">
-                      <ArrowDownCircle className="h-5 w-5" />
+                  <div className="p-3 bg-red-50 rounded-xl text-red-600">
+                      <ArrowDownCircle className="h-6 w-6" />
                   </div>
               </div>
               {dados.totalVencido > 0 && (
-                 <p className="text-xs text-red-600 font-bold mt-2">! {dados.totalVencido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} vencidos</p>
+                 <div className="mt-4 px-2 py-1 bg-red-50 rounded-md flex items-center gap-1.5">
+                    <AlertTriangle className="h-3 w-3 text-red-600" />
+                    <span className="text-[10px] text-red-600 font-black uppercase">
+                        {dados.totalVencido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} VENCIDOS
+                    </span>
+                 </div>
               )}
           </div>
 
           {/* A RECEBER */}
-          <div className="p-6 bg-white rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between">
+          <div className="group p-6 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
               <div className="flex justify-between items-start">
-                  <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">A Receber (Hoje)</p>
-                      <h3 className="text-2xl font-bold text-[#F26BB5] mt-1">
+                  <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Previsão Recebimento</p>
+                      <h3 className="text-2xl font-black text-[#F26BB5]">
                         {dados.aReceberHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </h3>
                   </div>
-                  <div className="p-2 bg-[#F26BB5]/10 rounded-lg text-[#F26BB5]">
-                      <ArrowUpCircle className="h-5 w-5" />
+                  <div className="p-3 bg-pink-50 rounded-xl text-[#F26BB5]">
+                      <ArrowUpCircle className="h-6 w-6" />
                   </div>
               </div>
           </div>
 
           {/* SALDO DO DIA */}
-          <div className="p-6 bg-white rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between">
+          <div className="group p-6 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
               <div className="flex justify-between items-start">
-                  <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Saldo do Dia</p>
-                      <h3 className={`text-2xl font-bold mt-1 ${dados.saldoDoDia >= 0 ? 'text-[#34BFBF]' : 'text-red-500'}`}>
+                  <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Previsto</p>
+                      <h3 className={`text-2xl font-black ${dados.saldoDoDia >= 0 ? 'text-[#34BFBF]' : 'text-red-500'}`}>
                         {dados.saldoDoDia.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </h3>
                   </div>
-                  <div className="p-2 bg-[#34BFBF]/10 rounded-lg text-[#34BFBF]">
-                      <TrendingUp className="h-5 w-5" />
+                  <div className="p-3 bg-[#34BFBF]/10 rounded-xl text-[#34BFBF]">
+                      <TrendingUp className="h-6 w-6" />
                   </div>
               </div>
-              <p className="text-xs text-slate-500 mt-2">Vendas + Recebimentos - Pagamentos</p>
+              <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase">Liquidez diária</p>
           </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* 3. GRÁFICO (Projeção de Caixa) */}
-          <div className="lg:col-span-2 bg-white border border-slate-100 rounded-xl shadow-sm p-6">
-              <div className="flex items-center justify-between mb-6">
+          {/* 3. GRÁFICO (Projeção de Caixa Avançado) */}
+          <div className="lg:col-span-2 bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-8">
                   <div className="flex items-center gap-2">
-                      <BarChart3 className="h-5 w-5 text-[#F22998]" />
-                      <h3 className="font-semibold text-lg text-slate-800">Projeção de Caixa (7 Dias)</h3>
+                      <div className="p-2 bg-slate-100 rounded-lg">
+                        <BarChart3 className="h-5 w-5 text-slate-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg text-slate-800">Fluxo de Caixa Semanal</h3>
+                        <p className="text-xs text-slate-400 font-medium">Previsão baseada em Contas a Pagar e Receber</p>
+                      </div>
                   </div>
               </div>
-              <div className="h-[250px] w-full">
+              <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={grafico}>
                           <defs>
                               <linearGradient id="colorSaldo" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor="#34BFBF" stopOpacity={0.2}/>
+                                  <stop offset="5%" stopColor="#34BFBF" stopOpacity={0.3}/>
                                   <stop offset="95%" stopColor="#34BFBF" stopOpacity={0}/>
                               </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} stroke="#94a3b8" />
+                          <XAxis dataKey="name" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} stroke="#94a3b8" dy={10} />
+                          <YAxis fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} stroke="#94a3b8" />
                           <Tooltip
-                              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                              formatter={(value) => [`R$ ${value.toFixed(2)}`, "Saldo Previsto"]}
+                              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.1)' }}
+                              formatter={(value) => [`R$ ${value.toLocaleString()}`, ""]}
                           />
-                          <Area type="monotone" dataKey="saldo" stroke="#34BFBF" strokeWidth={3} fill="url(#colorSaldo)" />
+                          <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 'bold' }} />
+                          <Area type="monotone" name="Saldo Acumulado" dataKey="saldo" stroke="#34BFBF" strokeWidth={3} fill="url(#colorSaldo)" />
+                          <Area type="monotone" name="Entradas" dataKey="entrada" stroke="#F26BB5" strokeWidth={2} fill="transparent" strokeDasharray="5 5" />
+                          <Area type="monotone" name="Saídas" dataKey="saida" stroke="#f87171" strokeWidth={2} fill="transparent" strokeDasharray="5 5" />
                       </AreaChart>
                   </ResponsiveContainer>
               </div>
           </div>
 
-          {/* 4. ALERTA DE ESTOQUE (Versão Simplificada) */}
-          <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-6 flex flex-col items-center justify-center text-center">
-              <div className="p-4 bg-amber-50 rounded-full mb-4">
-                  <AlertTriangle className="h-8 w-8 text-amber-500" />
+          {/* 4. REPOSIÇÃO DE ESTOQUE */}
+          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-8 flex flex-col items-center justify-center text-center">
+              <div className={`p-5 rounded-3xl mb-4 ${dados.alertasEstoque > 0 ? 'bg-amber-50 animate-pulse' : 'bg-slate-50'}`}>
+                  <AlertTriangle className={`h-10 w-10 ${dados.alertasEstoque > 0 ? 'text-amber-500' : 'text-slate-200'}`} />
               </div>
-              <h3 className="font-semibold text-lg text-slate-800 mb-1">Reposição Necessária</h3>
+              <h3 className="font-bold text-xl text-slate-800">Estoque Crítico</h3>
 
               {dados.alertasEstoque > 0 ? (
                   <>
-                    <p className="text-3xl font-bold text-slate-800 my-2">{dados.alertasEstoque}</p>
-                    <p className="text-sm text-slate-500 mb-6">Produtos atingiram o estoque mínimo.</p>
-                    <Button variant="outline" className="w-full" onClick={() => navigate("/produtos")}>
-                        Ver Lista de Produtos
+                    <div className="my-4">
+                        <span className="text-5xl font-black text-slate-800">{dados.alertasEstoque}</span>
+                        <span className="text-slate-400 font-bold ml-2 uppercase text-xs tracking-widest">Produtos</span>
+                    </div>
+                    <p className="text-sm text-slate-400 mb-8 px-4 font-medium leading-relaxed">
+                        Existem produtos que atingiram ou ultrapassaram o estoque de segurança.
+                    </p>
+                    <Button
+                        onClick={() => navigate("/produtos")}
+                        className="w-full bg-slate-900 hover:bg-black text-white rounded-xl h-12 font-bold"
+                    >
+                        Gerenciar Reposição
                     </Button>
                   </>
               ) : (
-                  <>
-                     <p className="text-slate-500 mt-2">Tudo certo! Nenhum produto crítico.</p>
-                     <Package className="h-12 w-12 text-slate-200 mt-4" />
-                  </>
+                  <div className="mt-4">
+                     <p className="text-slate-400 font-medium">Nenhum alerta de estoque.<br/>Operação estável.</p>
+                     <Package className="h-16 w-16 text-slate-50 mx-auto mt-6" />
+                  </div>
               )}
           </div>
 

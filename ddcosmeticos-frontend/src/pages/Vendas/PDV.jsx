@@ -458,7 +458,13 @@ export default function PDV() {
                                 <Button size="sm" variant="outline" onClick={() => adicionarPagamento(restante)} className="text-xs h-7 border-green-200 bg-green-50 text-green-700 hover:bg-green-100">
                                     Exato
                                 </Button>
-                                {/* Sugere nota de 50 ou 100 se o valor for próximo */}
+                                {/* Sugere nota de 0,50, 1,00, 2,00, 5,00, 20,00, 50,00 ou 100,00 se o valor for próximo */}
+
+                                {restante < 20 && (
+                                    <Button size="sm" variant="outline" onClick={() => adicionarPagamento(50)} className="text-xs h-7">
+                                        R$ 20
+                                    </Button>
+                                )}
                                 {restante < 50 && (
                                     <Button size="sm" variant="outline" onClick={() => adicionarPagamento(50)} className="text-xs h-7">
                                         R$ 50
