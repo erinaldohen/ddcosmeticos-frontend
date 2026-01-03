@@ -1,27 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, Check, Sparkles,
-  ArrowLeft, Loader2, Calculator, Keyboard, PauseCircle, Wallet, User, FileText, XCircle, Banknote
+  ArrowLeft, Loader2, PauseCircle, Wallet, User, FileText, XCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-hot-toast"; // Importação do Toast
 import api from "@/services/api";
 import { Cupom } from "@/components/Impressao/Cupom";
 
 const BEEP_SOUND = "data:audio/wav;base64,UklGRl9vT1BXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU";
-
-// Função utilitária para formatar moeda BRL
-const formatarMoedaInput = (valor) => {
-  if (!valor) return "";
-  const numero = valor.replace(/\D/g, "") / 100;
-  return numero.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const parseMoeda = (valorFormatado) => {
-  if (!valorFormatado) return 0;
-  return Number(valorFormatado.replace(/[^0-9,-]+/g, "").replace(",", ".")) / 100; // Ajuste para input com mascara
-};
 
 export default function PDV() {
   const navigate = useNavigate();
@@ -54,19 +43,16 @@ export default function PDV() {
 
   // --- IDENTIFICAÇÃO DO OPERADOR (Ao carregar) ---
   useEffect(() => {
-    // Tenta pegar do localStorage (padrão de autenticação JWT)
-    // Ajuste a chave conforme seu sistema de login ('user', 'usuario', 'auth_data')
     const usuarioSalvo = localStorage.getItem("usuario") || localStorage.getItem("user");
     if (usuarioSalvo) {
       try {
         const userObj = JSON.parse(usuarioSalvo);
-        // Pega o nome ou login ou email
         setOperador(userObj.nome || userObj.login || userObj.email || "Operador");
       } catch (e) {
         setOperador("Operador Local");
       }
     } else {
-        setOperador("Caixa 01"); // Fallback
+        setOperador("Caixa 01");
     }
   }, []);
 
@@ -82,7 +68,6 @@ export default function PDV() {
   const troco = totalPago > totalVenda ? totalPago - totalVenda : 0;
 
   // --- AUTOPREENCHIMENTO INTELIGENTE ---
-  // Sempre que o restante muda, atualiza o input de pagamento sugerido
   useEffect(() => {
     if (restante > 0) {
         const valorFormatado = restante.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -90,7 +75,7 @@ export default function PDV() {
     } else {
         setValorPagamentoInput("");
     }
-  }, [restante, carrinho, desconto]); // Atualiza se mudar itens, desconto ou pagamentos
+  }, [restante, carrinho, desconto]);
 
   const playBeep = () => { try { new Audio(BEEP_SOUND).play(); } catch (e) {} };
 
@@ -112,12 +97,15 @@ export default function PDV() {
     setLoadingBusca(true);
     try {
         const { data } = await api.get(`/api/v1/produtos?busca=${termo}`);
-        if (data.length === 1 && data[0].codigoBarras === termo) {
-            adicionarAoCarrinho(data[0]);
+        // Se vier uma página do Spring, pega o content
+        const lista = data.content || data;
+
+        if (lista.length === 1 && lista[0].codigoBarras === termo) {
+            adicionarAoCarrinho(lista[0]);
             playBeep();
             limparBusca();
         } else {
-            setProdutosEncontrados(data);
+            setProdutosEncontrados(lista);
         }
     } catch (error) {
         console.error("Erro busca:", error);
@@ -150,9 +138,9 @@ export default function PDV() {
 
   // --- 2. CARRINHO ---
   const adicionarAoCarrinho = (produto) => {
+    // Validação de Validade (FEFO) - Exemplo simples
     if (produto.quantidadeEmEstoque <= 0) {
-        // alert(`🚫 Produto sem estoque!`); // Descomente para bloquear
-        // return;
+        toast("⚠️ Atenção: Estoque zerado ou negativo!", { icon: "⚠️" });
     }
 
     setCarrinho(prev => {
@@ -188,7 +176,6 @@ export default function PDV() {
   // --- 3. FINANCEIRO INTELIGENTE ---
 
   const handleValorPagamentoChange = (e) => {
-      // Aplica máscara de moeda em tempo real
       const valorRaw = e.target.value.replace(/\D/g, "");
       const numero = Number(valorRaw) / 100;
       const formatado = numero.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -203,23 +190,18 @@ export default function PDV() {
   };
 
   const adicionarPagamento = (valorOverride = null) => {
-      // Se passou um valor direto (botões de sugestão), usa ele. Se não, usa o input.
       let valorParaPagar;
 
       if (valorOverride) {
           valorParaPagar = valorOverride;
       } else {
-          // Converte a string "R$ 10,00" para float 10.00
           const valorRaw = valorPagamentoInput.replace(/\D/g, "");
           valorParaPagar = Number(valorRaw) / 100;
       }
 
       if (!valorParaPagar || valorParaPagar <= 0) return;
 
-      // Adiciona o pagamento
       setPagamentos(prev => [...prev, { formaPagamento: metodoSelecionado, valor: valorParaPagar }]);
-
-      // O useEffect vai recalcular o restante e atualizar o input automaticamente
   };
 
   const removerPagamento = (index) => {
@@ -252,10 +234,11 @@ export default function PDV() {
       const payload = gerarPayload();
       const response = await api.post("/api/v1/vendas", payload);
       setVendaConcluida(response.data);
+      toast.success("Venda realizada com sucesso!");
     } catch (error) {
       console.error(error);
       const msg = error.response?.data?.message || error.message;
-      alert(`❌ Erro: ${msg}`);
+      toast.error(`Erro: ${msg}`);
     } finally {
       setLoadingFinalizar(false);
     }
@@ -267,10 +250,10 @@ export default function PDV() {
       try {
           const payload = gerarPayload();
           await api.post("/api/v1/vendas/suspender", payload);
-          alert("✅ Venda suspensa!");
+          toast.success("Venda suspensa!");
           resetarTotalmente();
       } catch (error) {
-          alert("Erro ao suspender");
+          toast.error("Erro ao suspender");
       } finally {
           setLoadingFinalizar(false);
       }
@@ -279,6 +262,7 @@ export default function PDV() {
   const cancelarVendaTotal = () => {
       if (confirm("⚠️ Cancelar toda a venda e limpar a tela?")) {
           resetarTotalmente();
+          toast("Venda cancelada.", { icon: "🗑️" });
       }
   };
 
@@ -309,7 +293,6 @@ export default function PDV() {
                     <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
                         <Sparkles className="h-5 w-5 text-[#34BFBF]"/> PDV
                     </h2>
-                    {/* IDENTIFICAÇÃO DO OPERADOR AUTOMÁTICA */}
                     <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wide">
                         OPERADOR: <span className="text-[#F22998] font-bold">{operador}</span>
                     </p>
@@ -458,23 +441,8 @@ export default function PDV() {
                                 <Button size="sm" variant="outline" onClick={() => adicionarPagamento(restante)} className="text-xs h-7 border-green-200 bg-green-50 text-green-700 hover:bg-green-100">
                                     Exato
                                 </Button>
-                                {/* Sugere nota de 0,50, 1,00, 2,00, 5,00, 20,00, 50,00 ou 100,00 se o valor for próximo */}
-
-                                {restante < 20 && (
-                                    <Button size="sm" variant="outline" onClick={() => adicionarPagamento(50)} className="text-xs h-7">
-                                        R$ 20
-                                    </Button>
-                                )}
-                                {restante < 50 && (
-                                    <Button size="sm" variant="outline" onClick={() => adicionarPagamento(50)} className="text-xs h-7">
-                                        R$ 50
-                                    </Button>
-                                )}
-                                {restante < 100 && (
-                                    <Button size="sm" variant="outline" onClick={() => adicionarPagamento(100)} className="text-xs h-7">
-                                        R$ 100
-                                    </Button>
-                                )}
+                                {restante < 20 && <Button size="sm" variant="outline" onClick={() => adicionarPagamento(50)} className="text-xs h-7">R$ 50</Button>}
+                                {restante < 50 && <Button size="sm" variant="outline" onClick={() => adicionarPagamento(100)} className="text-xs h-7">R$ 100</Button>}
                             </div>
                         )}
                     </div>
@@ -519,7 +487,6 @@ export default function PDV() {
                         className="bg-slate-50 text-xs h-9 pl-8" placeholder="CPF/CNPJ"
                         value={clienteDocumento}
                         onChange={e => {
-                            // Mascara CPF/CNPJ visual
                             let v = e.target.value.replace(/\D/g,"");
                             if(v.length > 14) v = v.slice(0,14);
                             if(v.length > 11) {

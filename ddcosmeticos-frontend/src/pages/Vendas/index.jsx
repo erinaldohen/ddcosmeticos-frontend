@@ -1,176 +1,199 @@
-import { useEffect, useState } from "react";
-import { Plus, ShoppingCart, Search, Printer, Calendar, FileText, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import api from "@/services/api";
+import { formatarMoeda, formatarDataCurta } from "@/lib/formatters";
+import {
+  Search, Calendar, CheckCircle, XCircle, Clock,
+  MoreHorizontal, Eye, Filter, ArrowRight, RefreshCw
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useNavigate } from "react-router-dom";
-import { db } from "@/services/db";
-import { Cupom } from "@/components/Impressao/Cupom";
-import axios from "axios"; // Importamos axios diretamente para evitar o prefixo /api/v1
+import { Badge } from "@/components/ui/badge";
 
 export default function Vendas() {
-  const navigate = useNavigate();
-  const [vendas, setVendas] = useState([]);
-  const [busca, setBusca] = useState("");
-  const [vendaSelecionada, setVendaSelecionada] = useState(null);
+  const [pagina, setPagina] = useState(0);
+  const [termo, setTermo] = useState("");
 
-  // Estado para controlar qual venda está a emitir nota neste momento
-  const [loadingId, setLoadingId] = useState(null);
+  // --- QUERY DE DADOS ---
+  const { data, isLoading, isError, isPlaceholderData, refetch, isRefetching } = useQuery({
+    queryKey: ['vendas', pagina, termo],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: pagina,
+        size: 10,
+        sort: 'dataVenda,desc',
+        // Envia busca se houver (requer suporte no backend, mas não quebra se não tiver)
+        ...(termo && { busca: termo })
+      });
+      const res = await api.get(`/api/v1/vendas?${params.toString()}`);
+      return res.data;
+    },
+    placeholderData: (prev) => prev, // Mantém dados antigos enquanto carrega novos
+    refetchInterval: 30000, // Atualiza a cada 30s
+  });
 
-  useEffect(() => {
-    // Carrega e inverte a ordem (mais recentes primeiro)
-    setVendas(db.getVendas().reverse());
-  }, []);
+  const vendas = data?.content || [];
+  const totalPaginas = data?.totalPages || 0;
 
-  const vendasFiltradas = vendas.filter(v =>
-    (v.cliente && v.cliente.toLowerCase().includes(busca.toLowerCase())) ||
-    (v.id && v.id.toString().includes(busca))
-  );
+  // Componente interno para Status
+  const StatusBadge = ({ status }) => {
+    const map = {
+      APROVADA: { variant: "default", className: "bg-emerald-500 hover:bg-emerald-600 border-none" },
+      PENDENTE: { variant: "secondary", className: "bg-amber-100 text-amber-700 hover:bg-amber-200" },
+      CANCELADA: { variant: "destructive", className: "bg-red-100 text-red-700 hover:bg-red-200 border-none" },
+      ORCAMENTO: { variant: "outline", className: "text-blue-500 border-blue-200" }
+    };
 
-  // Função para chamar o Backend Java
-  const handleEmitirNfe = async (venda) => {
-    // Inicia o loading apenas para este ID
-    setLoadingId(venda.id);
+    const config = map[status] || { variant: "outline", className: "text-slate-500" };
 
-    try {
-      // Chama a URL direta do seu backend (baseada no IP do seu api.js)
-      // Ajuste o IP aqui se o seu servidor mudar (ex: localhost)
-      const response = await axios.post(`http://192.168.0.6:8080/nfe/emitir/${venda.id}`);
-
-      // Se der certo:
-      const dados = response.data;
-      alert(`✅ Sucesso!\nStatus: ${dados.status} - ${dados.motivo}\nChave: ${dados.chave}`);
-
-      // Opcional: Atualizar a venda localmente para dizer que já tem nota
-      // (Isso exigiria que o db.js suportasse atualização de status)
-
-    } catch (error) {
-      console.error("Erro ao emitir:", error);
-
-      // Tenta pegar a mensagem de erro do backend ou usa uma genérica
-      const mensagemErro = error.response?.data || error.message || "Erro de conexão";
-      alert(`❌ Erro ao emitir NF-e:\n${mensagemErro}`);
-
-    } finally {
-      // Para o loading independente do resultado
-      setLoadingId(null);
-    }
+    return (
+      <Badge variant={config.variant} className={config.className}>
+        {status}
+      </Badge>
+    );
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
 
-      {/* Exibe o Cupom se selecionado */}
-      {vendaSelecionada && (
-        <Cupom venda={vendaSelecionada} onClose={() => setVendaSelecionada(null)} />
-      )}
-
-      {/* CABEÇALHO */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          {/* Título Turquesa #34BFBF */}
-          <h1 className="text-3xl font-bold tracking-tight text-[#34BFBF] flex items-center gap-2">
-            <ShoppingCart className="h-8 w-8" /> Histórico de Vendas
-          </h1>
-          <p className="text-slate-500">Consulte todas as vendas realizadas.</p>
+          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Histórico de Vendas</h1>
+          <p className="text-slate-500 text-sm">Monitore todas as transações em tempo real.</p>
         </div>
-
-        {/* Botão de Ação Rosa #F22998 */}
-        <Button
-            onClick={() => navigate("/vendas/pdv")}
-            className="bg-[#F22998] hover:bg-[#d91e85] text-white font-bold shadow-lg shadow-[#F22998]/20"
-        >
-          <Plus className="mr-2 h-4 w-4" /> Nova Venda (PDV)
-        </Button>
+        <div className="flex gap-2">
+            <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => refetch()}
+                className={isRefetching ? "animate-spin" : ""}
+            >
+                <RefreshCw className="h-4 w-4 text-slate-400" />
+            </Button>
+            <Link to="/vendas/pdv">
+              <Button className="bg-[#34BFBF] hover:bg-[#2aa8a8] text-white shadow-md">
+                <ArrowRight className="mr-2 h-4 w-4" /> Abrir Caixa (PDV)
+              </Button>
+            </Link>
+        </div>
       </div>
 
-      {/* BARRA DE FERRAMENTAS */}
-      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
+      {/* FILTROS */}
+      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
           <Input
-            placeholder="Buscar por cliente ou número da venda..."
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            className="pl-10 border-slate-200 focus:border-[#34BFBF] focus:ring-[#34BFBF]"
+            placeholder="Buscar por cliente ou documento..."
+            className="pl-9 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
+            value={termo}
+            onChange={(e) => { setTermo(e.target.value); setPagina(0); }}
           />
+        </div>
+        <div className="flex gap-2">
+            <Button variant="outline" className="border-slate-200 text-slate-600 hover:text-[#34BFBF] hover:border-[#34BFBF]">
+              <Calendar className="mr-2 h-4 w-4" /> Data
+            </Button>
+            <Button variant="outline" className="border-slate-200 text-slate-600 hover:text-[#34BFBF] hover:border-[#34BFBF]">
+              <Filter className="mr-2 h-4 w-4" /> Status
+            </Button>
         </div>
       </div>
 
       {/* LISTAGEM */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-            <thead>
-                <tr className="bg-[#F2F2F2] border-b border-slate-200">
-                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Venda</th>
-                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Cliente</th>
-                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Data</th>
-                <th className="px-6 py-4 text-left font-bold text-slate-600 uppercase tracking-wider text-xs">Pagamento</th>
-                <th className="px-6 py-4 text-right font-bold text-slate-600 uppercase tracking-wider text-xs">Total</th>
-                <th className="px-6 py-4 text-center font-bold text-slate-600 uppercase tracking-wider text-xs">Ações</th>
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-                {vendasFiltradas.length === 0 ? (
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold uppercase text-xs">
                 <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-slate-400">
-                    <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                    Nenhuma venda encontrada.
-                    </td>
+                  <th className="px-6 py-4">Data</th>
+                  <th className="px-6 py-4">Cliente</th>
+                  <th className="px-6 py-4">Forma Pagto</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Valor Total</th>
+                  <th className="px-6 py-4 text-center">Ações</th>
                 </tr>
-                ) : (
-                vendasFiltradas.map((venda) => (
-                    <tr key={venda.id} className="group hover:bg-[#34BFBF]/5 transition-colors">
-                    <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                        #{venda.id}
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-700">
-                        {venda.cliente}
-                    </td>
-                    <td className="px-6 py-4 text-slate-500 text-xs flex items-center gap-2">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(venda.data).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4">
-                        <span className="bg-slate-50 px-2 py-1 rounded border border-slate-100 text-xs font-medium text-slate-600 uppercase">
-                            {venda.metodo}
-                        </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold text-[#F22998]">
-                        {(venda.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </td>
-                    <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
-                        {/* BOTÃO VER CUPOM */}
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-[#34BFBF] border-slate-200 hover:bg-[#34BFBF] hover:text-white hover:border-[#34BFBF]"
-                            onClick={() => setVendaSelecionada(venda)}
-                        >
-                            <Printer className="mr-2 h-3 w-3" /> Cupom
-                        </Button>
-
-                        {/* BOTÃO NOVO: EMITIR NF-E */}
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-orange-500 border-orange-200 hover:bg-orange-500 hover:text-white hover:border-orange-500"
-                            onClick={() => handleEmitirNfe(venda)}
-                            disabled={loadingId === venda.id} // Desabilita se estiver carregando
-                        >
-                            {loadingId === venda.id ? (
-                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                            ) : (
-                                <FileText className="mr-2 h-3 w-3" />
-                            )}
-                            {loadingId === venda.id ? "Emitindo..." : "NF-e"}
-                        </Button>
-                    </td>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isLoading ? (
+                  [...Array(5)].map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-20"></div></td>
+                      <td className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-40"></div></td>
+                      <td className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-24"></div></td>
+                      <td className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-20"></div></td>
+                      <td className="px-6 py-4 text-right"><div className="h-4 bg-slate-100 rounded w-16 ml-auto"></div></td>
+                      <td className="px-6 py-4"></td>
                     </tr>
-                ))
+                  ))
+                ) : vendas.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="py-12 text-center text-slate-400">
+                      Nenhuma venda encontrada.
+                    </td>
+                  </tr>
+                ) : (
+                  vendas.map((venda) => (
+                    // IMPORTANTE: venda.idVenda (DTO) vs venda.id (Entity)
+                    <tr key={venda.idVenda} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                            <span className="font-medium text-slate-700">{formatarDataCurta(venda.dataVenda)}</span>
+                            <span className="text-[10px] text-slate-400">
+                                {new Date(venda.dataVenda).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                            </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-slate-700">{venda.clienteNome || "Consumidor Final"}</div>
+                        <div className="text-[10px] text-slate-400 font-normal font-mono">
+                            {venda.clienteDocumento || "---"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded border border-slate-200">
+                            {venda.formaPagamento ? venda.formaPagamento.replace('_', ' ') : 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <StatusBadge status={venda.statusFiscal} />
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-800 text-base">
+                        {/* IMPORTANTE: Usa valorTotal, não totalVenda */}
+                        {formatarMoeda(venda.valorTotal)}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-[#34BFBF] hover:bg-slate-50">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
                 )}
-            </tbody>
+              </tbody>
             </table>
+        </div>
+
+        {/* PAGINAÇÃO */}
+        <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50">
+          <Button
+            variant="outline" size="sm"
+            onClick={() => setPagina(p => Math.max(0, p - 1))}
+            disabled={pagina === 0 || isLoading}
+          >
+            Anterior
+          </Button>
+          <span className="text-xs font-medium text-slate-500">
+            Página <span className="font-bold text-slate-700">{pagina + 1}</span> de {totalPaginas || 1}
+          </span>
+          <Button
+            variant="outline" size="sm"
+            onClick={() => setPagina(p => (isPlaceholderData || !data?.last ? p + 1 : p))}
+            disabled={isPlaceholderData || data?.last || isLoading}
+          >
+            Próxima
+          </Button>
         </div>
       </div>
     </div>
