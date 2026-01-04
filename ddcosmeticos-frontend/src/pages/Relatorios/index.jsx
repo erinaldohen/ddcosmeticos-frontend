@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { toast } from "react-hot-toast";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/services/api";
+import { formatarMoeda, formatarDataCurta } from "@/lib/formatters";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
@@ -11,7 +14,7 @@ import {
   Layers, FileText, FileSpreadsheet, Loader2, ArrowUpRight, ArrowDownRight,
   CreditCard, Users, Sparkles, Lightbulb, TrendingDown, AlertTriangle, Target, ShoppingBag, ShieldAlert,
   Activity, Filter, Clock, Share2, Box, Percent, Award, Scale, PiggyBank, Wallet,
-  Repeat, Link as LinkIcon, LayoutGrid, BarChart3, Briefcase, Microscope
+  Repeat, Link as LinkIcon, LayoutGrid, BarChart3, Briefcase, Microscope, ArrowDownCircle, ArrowUpCircle
 } from "lucide-react";
 
 // ==========================================
@@ -26,7 +29,7 @@ const BRAND = {
   amber: '#F59E0B',      // Âmbar Dourado
   slate: '#94a3b8',      // Textos Legenda/Eixos
   grid: '#f1f5f9',       // Grades sutis
-  dark: '#334155'        // Texto Principal (Substitui o preto)
+  dark: '#334155'        // Texto Principal
 };
 
 // Paleta completa para itens variados
@@ -92,18 +95,10 @@ const ChartDefs = () => (
   </svg>
 );
 
-const CustomTooltip = ({ active, payload, label, showDelta = false }) => {
+const CustomTooltipContent = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
-    let delta = null;
-    let deltaColor = "";
-    if (showDelta && payload.length >= 2) {
-      const current = payload[0]?.value || 0;
-      const previous = payload[1]?.value || 1;
-      const diff = ((current - previous) / previous) * 100;
-      if (previous !== 0) { delta = diff.toFixed(1); deltaColor = diff >= 0 ? "text-[#34BFBF]" : "text-[#F22998]"; }
-    }
     return (
-      <div className="bg-white/95 backdrop-blur-sm border border-slate-100 shadow-2xl rounded-xl p-4 min-w-[150px]">
+      <div className="bg-white border border-slate-100 shadow-2xl rounded-xl p-4 min-w-[150px]">
         <p className="font-bold text-slate-400 text-[10px] mb-3 uppercase tracking-wider">{label}</p>
         {payload.map((entry, index) => (
           <div key={index} className="flex items-center justify-between gap-4 mb-2 last:mb-0">
@@ -112,16 +107,58 @@ const CustomTooltip = ({ active, payload, label, showDelta = false }) => {
                 <span className="text-[#334155] text-xs font-semibold">{entry.name}</span>
             </div>
             <span className="font-bold text-[#334155] text-xs tabular-nums">
-               {typeof entry.value === 'number' && Math.abs(entry.value) > 100 ? `R$ ${Math.abs(entry.value).toLocaleString('pt-BR')}` : entry.value}
+               {typeof entry.value === 'number' && entry.value > 100 ? formatarMoeda(entry.value) : entry.value}
             </span>
           </div>
         ))}
-        {delta && <div className={`mt-3 pt-3 border-t border-slate-50 text-[10px] font-black flex items-center gap-1 ${deltaColor}`}><TrendingUp className="h-3 w-3" /> {Math.abs(delta)}% vs Anterior</div>}
       </div>
     );
   }
   return null;
 };
+
+const ChartCard = ({ title, subtitle, analysis, onDownload, children, fullWidth = false, className="", isLoading = false }) => (
+  <div className={`bg-white rounded-3xl border border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : 'col-span-1'} ${className}`}>
+    <div className="p-6 pb-4 flex justify-between items-start border-b border-slate-50">
+      <div><h3 className="font-bold text-[#334155] text-lg tracking-tight">{title}</h3><p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">{subtitle}</p></div>
+      <PremiumTooltip text="Exportar visualização">
+        <Button variant="ghost" size="icon" onClick={onDownload} className="text-slate-300 hover:text-[#34BFBF] rounded-xl -mt-1 -mr-2"><Download className="h-5 w-5" /></Button>
+      </PremiumTooltip>
+    </div>
+    <div className="w-full px-5 py-4 flex-1 relative min-h-[300px]" style={{ height: '300px' }}>
+      {isLoading ? (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="animate-spin h-8 w-8 border-4 border-[#34BFBF] border-t-transparent rounded-full"></div>
+        </div>
+      ) : children}
+    </div>
+    {analysis && (
+        <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-50 rounded-b-3xl flex items-start gap-3">
+            <Activity className="h-4 w-4 text-[#34BFBF] mt-0.5" />
+            <p className="text-[11px] text-slate-600 leading-relaxed"><span className="font-bold text-[#334155] uppercase text-[9px] block mb-0.5">Diagnóstico BI:</span>{analysis}</p>
+        </div>
+    )}
+  </div>
+);
+
+const TabButton = ({ active, label, icon: Icon, onClick }) => (
+  <button onClick={onClick} className={`group flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all rounded-full min-w-max relative ${active ? "text-white shadow-lg shadow-[#34BFBF]/25" : "text-slate-500 hover:text-slate-900 hover:bg-white"}`}>
+    {active && <div className="absolute inset-0 bg-gradient-to-r from-[#34BFBF] to-[#2ca8a8] rounded-full -z-10"></div>}
+    <Icon className={`h-4 w-4 transition-colors ${active ? "text-white" : "text-slate-400 group-hover:text-[#34BFBF]"}`} /> {label}
+  </button>
+);
+
+const KpiCard = ({ title, value, subtext, icon: Icon, trend }) => (
+    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+        <div className="flex justify-between items-start mb-5">
+            <div><p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">{title}</p><h4 className="text-2xl font-black text-[#334155] tracking-tight">{value}</h4></div>
+            <div className={`p-3 rounded-xl bg-slate-50 border border-slate-100 group-hover:bg-[#34BFBF]/5 transition-colors`}><Icon className="h-6 w-6 text-slate-400 group-hover:text-[#34BFBF] transition-colors" /></div>
+        </div>
+        <div className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-1 rounded-md ${trend === 'up' ? 'bg-emerald-50 text-emerald-600' : trend === 'down' ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-500'}`}>
+            {trend === 'up' && <ArrowUpRight className="h-3 w-3" />}{trend === 'down' && <ArrowDownRight className="h-3 w-3" />}{subtext}
+        </div>
+    </div>
+);
 
 const AiInsightCard = ({ insights, categoria }) => (
     <div className="group relative bg-gradient-to-br from-slate-900 via-slate-800 to-[#1e3a3a] text-white p-6 rounded-3xl shadow-2xl overflow-hidden mb-8 border border-white/5">
@@ -150,49 +187,12 @@ const AiInsightCard = ({ insights, categoria }) => (
     </div>
 );
 
-const ChartCard = ({ title, subtitle, analysis, onDownload, children, fullWidth = false, className="" }) => (
-  <div className={`bg-white rounded-3xl border border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : 'col-span-1'} ${className}`}>
-    <div className="p-6 pb-4 flex justify-between items-start border-b border-slate-50">
-      <div><h3 className="font-bold text-[#334155] text-lg tracking-tight">{title}</h3><p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">{subtitle}</p></div>
-      <PremiumTooltip text="Exportar visualização">
-        <Button variant="ghost" size="icon" onClick={onDownload} className="text-slate-300 hover:text-[#34BFBF] rounded-xl -mt-1 -mr-2"><Download className="h-5 w-5" /></Button>
-      </PremiumTooltip>
-    </div>
-    <div className="w-full px-5 py-4 flex-1 relative" style={{ height: '300px', minHeight: '300px' }}>{children}</div>
-    {analysis && (
-        <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-50 rounded-b-3xl flex items-start gap-3">
-            <Activity className="h-4 w-4 text-[#34BFBF] mt-0.5" />
-            <p className="text-[11px] text-slate-500 leading-relaxed"><span className="font-bold text-[#334155] uppercase text-[9px] block mb-0.5">Diagnóstico BI:</span>{analysis}</p>
-        </div>
-    )}
-  </div>
-);
-
-const TabButton = ({ active, label, icon: Icon, onClick }) => (
-  <button onClick={onClick} className={`group flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all rounded-full min-w-max relative ${active ? "text-white shadow-lg shadow-[#34BFBF]/25" : "text-slate-500 hover:text-slate-900 hover:bg-white"}`}>
-    {active && <div className="absolute inset-0 bg-gradient-to-r from-[#34BFBF] to-[#2ca8a8] rounded-full -z-10"></div>}
-    <Icon className={`h-4 w-4 transition-colors ${active ? "text-white" : "text-slate-400 group-hover:text-[#34BFBF]"}`} /> {label}
-  </button>
-);
-
-const KpiCard = ({ title, value, subtext, icon: Icon, trend }) => (
-    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-        <div className="flex justify-between items-start mb-5">
-            <div><p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">{title}</p><h4 className="text-2xl font-black text-[#334155] tracking-tight">{value}</h4></div>
-            <div className={`p-3 rounded-xl bg-slate-50 border border-slate-100 group-hover:bg-[#34BFBF]/5 transition-colors`}><Icon className="h-6 w-6 text-slate-300 group-hover:text-[#34BFBF] transition-colors" /></div>
-        </div>
-        <div className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-1 rounded-md ${trend === 'up' ? 'bg-emerald-50 text-emerald-600' : trend === 'down' ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-500'}`}>
-            {trend === 'up' && <ArrowUpRight className="h-3 w-3" />}{trend === 'down' && <ArrowDownRight className="h-3 w-3" />}{subtext}
-        </div>
-    </div>
-);
-
 // ==========================================
-// 2. DADOS MOCKADOS (ESCOPO GLOBAL)
+// 2. DADOS MOCKADOS (ESCOPO GLOBAL PARA FALLBACK)
 // ==========================================
 
 const mockVendasTendencia = [{ dia: '01', atual: 4000, anterior: 3500, tendencia: 3900 }, { dia: '05', atual: 3000, anterior: 2800, tendencia: 4100 }, { dia: '10', atual: 9800, anterior: 7500, tendencia: 4300 }, { dia: '15', atual: 2780, anterior: 2900, tendencia: 4500 }, { dia: '20', atual: 6890, anterior: 5500, tendencia: 4700 }, { dia: '25', atual: 2390, anterior: 2100, tendencia: 4900 }, { dia: '30', atual: 3490, anterior: 3200, tendencia: 5100 }];
-const mockFunil = [{ value: 1200, name: 'Passantes', fill: '#cbd5e1' }, { value: 450, name: 'Visitas', fill: BRAND.teal }, { value: 280, name: 'Experiência', fill: BRAND.purple }, { value: 142, name: 'Venda', fill: BRAND.pink }];
+const mockFunil = [{ value: 1200, name: 'Passantes', fill: BRAND.slate }, { value: 450, name: 'Visitas', fill: BRAND.teal }, { value: 280, name: 'Experiência', fill: BRAND.softPink }, { value: 142, name: 'Venda', fill: BRAND.pink }];
 const mockRetencao = [{ mes: 'Jan', novos: 15000, recorrentes: 25000 }, { mes: 'Fev', novos: 12000, recorrentes: 28000 }, { mes: 'Mar', novos: 18000, recorrentes: 32000 }, { mes: 'Abr', novos: 14000, recorrentes: 35000 }];
 const mockDistribuicaoTicket = [{ range: '0-50', qtd: 120 }, { range: '51-100', qtd: 250 }, { range: '101-200', qtd: 180 }, { range: '201-500', qtd: 80 }, { range: '500+', qtd: 20 }];
 const mockCrossSell = [{ par: 'Shampoo+Cond', freq: 450, conversao: 85 }, { par: 'Base+Pó', freq: 320, conversao: 65 }, { par: 'Perfume+Hidra', freq: 150, conversao: 40 }, { par: 'Batom+Lápis', freq: 110, conversao: 30 }];
@@ -205,19 +205,16 @@ const mockPagamentos = [{ name: 'Crédito', value: 45000 }, { name: 'PIX', value
 const mockHorarios = [{ hora: '08h', fluxo: 10 }, { hora: '10h', fluxo: 35 }, { hora: '12h', fluxo: 80 }, { hora: '14h', fluxo: 45 }, { hora: '16h', fluxo: 60 }, { hora: '18h', fluxo: 95 }, { hora: '20h', fluxo: 30 }];
 const mockCategoriasMoM = [{ name: 'Cabelos', atual: 45000, anterior: 41000 }, { name: 'Maquiagem', atual: 32000, anterior: 35000 }, { name: 'Perfumaria', atual: 58000, anterior: 49000 }, { name: 'Skincare', atual: 21000, anterior: 18000 }];
 const mockTicket = [{ name: 'Sua Loja', valor: 145 }, { name: 'Média Setor', valor: 110 }];
-
 const mockCurvaABC = [{ name: 'Classe A', produtos: 20, receita: 80 }, { name: 'Classe B', produtos: 30, receita: 15 }, { name: 'Classe C', produtos: 50, receita: 5 }];
 const mockBCG = [{ name: 'Shampoo', x: 180, y: 140, z: 5000, fill: BRAND.teal }, { name: 'Esmalte', x: 250, y: 20, z: 2000, fill: BRAND.amber }, { name: 'Perfume', x: 30, y: 250, z: 6000, fill: BRAND.pink }, { name: 'Creme', x: 10, y: 10, z: 400, fill: BRAND.purple }];
 const mockAging = [{ name: '0-30d', value: 45000, fill: BRAND.teal }, { name: '31-60d', value: 25000, fill: BRAND.softPink }, { name: '61-90d', value: 15000, fill: BRAND.purple }, { name: '>90d', value: 8000, fill: BRAND.amber }];
 const mockRuptura = [{ mes: 'Jan', taxa: 4.2 }, { mes: 'Fev', taxa: 3.5 }, { mes: 'Mar', taxa: 2.1 }, { mes: 'Abr', taxa: 2.8 }];
 const mockEstoqueCategorias = [{ name: 'Cabelos', valor: 45000 }, { name: 'Maquiagem', valor: 32000 }, { name: 'Perfumaria', valor: 58000 }, { name: 'Skincare', valor: 21000 }];
-const mockValidade = [{ periodo: '30d', valor: 2500 }, { periodo: '60d', valor: 5800 }, { periodo: '90d', valor: 12000 }, { periodo: '>90d', valor: 45000 }];
+const mockValidade = [{ periodo: '30d', valor: 2500 }, { periodo: '60d', stroke: BRAND.pink, valor: 5800 }, { periodo: '90d', valor: 12000 }, { periodo: '>90d', valor: 45000 }];
 const mockCobertura = [{ name: 'Cabelos', dias: 45 }, { name: 'Make', dias: 25 }, { name: 'Perfume', dias: 90 }, { name: 'Skin', dias: 15 }];
-
-const mockFluxoCaixa = [{ dia: '01', entrada: 5000, saida: 2000, saldo: 3000 }, { dia: '05', entrada: 4200, saida: 4000, saldo: 200 }, { dia: '10', entrada: 12000, saida: 5000, saldo: 7000 }, { dia: '15', entrada: 3000, saida: 8000, saldo: -5000 }, { dia: '20', entrada: 8000, saida: 3000, saldo: 5000 }, { dia: '25', entrada: 4000, saida: 2000, saldo: 2000 }, { dia: '30', entrada: 6000, saida: 1000, saldo: 5000 }];
-const mockDRE = [{ name: 'Receita', valor: 124000, fill: BRAND.teal }, { name: 'Custos', valor: -63000, fill: BRAND.softPink }, { name: 'Despesas', valor: -28600, fill: BRAND.amber }, { name: 'Lucro', valor: 32400, fill: BRAND.pink }];
+const mockFluxoCaixa = [{ dia: '01', entrada: 5000, saida: 2000, saldo: 3000 }, { dia: '15', entrada: 3000, saida: 8000, saldo: -5000 }, { dia: '30', entrada: 6000, saida: 1000, saldo: 5000 }];
+const mockDRE = [{ name: 'Receita', valor: 124000, fill: BRAND.teal }, { name: 'Custos', valor: -63000, fill: BRAND.red }, { name: 'Despesas', valor: -28600, fill: BRAND.amber }, { name: 'Lucro', valor: 32400, fill: BRAND.softPink }];
 const mockDespesasDetalhadas = [{ name: 'Pessoal', value: 12000, fill: BRAND.teal }, { name: 'Aluguel', value: 8000, fill: BRAND.purple }, { name: 'Mkt/Ads', value: 4500, fill: BRAND.pink }, { name: 'Taxas', value: 3200, fill: BRAND.amber }, { name: 'Outros', value: 900, fill: BRAND.slate }];
-
 const mockFiscalSegregacao = [{ name: 'Monofásico', value: 65000, fill: BRAND.amber }, { name: 'Tributado', value: 35000, fill: BRAND.slate }, { name: 'Subst. Trib.', value: 24000, fill: BRAND.teal }];
 const mockFiscalEconomia = [{ mes: 'Jan', pago: 4200, economizado: 2100 }, { mes: 'Fev', pago: 3800, economizado: 1900 }, { mes: 'Mar', pago: 5100, economizado: 3200 }, { mes: 'Abr', pago: 4500, economizado: 2500 }];
 const mockFiscalCarga = [{ mes: 'Jan', fat: 100000, carga: 4.5 }, { mes: 'Fev', fat: 95000, carga: 4.2 }, { mes: 'Mar', fat: 130000, carga: 5.1 }, { mes: 'Abr', fat: 124000, carga: 4.8 }];
@@ -232,13 +229,42 @@ const mockInsightsData = {
 };
 
 // ==========================================
-// 3. COMPONENTE PRINCIPAL
+// 3. COMPONENTE PRINCIPAL (INTEGRADO)
 // ==========================================
 
 export default function RelatoriosDashboard() {
   const [categoriaAtiva, setCategoriaAtiva] = useState("vendas");
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 8) + "01");
   const [dataFim, setDataFim] = useState(new Date().toISOString().slice(0, 10));
+
+  // --- QUERIES BACKEND ---
+  const { data: dadosComercial, isLoading: loadingVendas } = useQuery({
+    queryKey: ['relatorio-vendas', dataInicio, dataFim],
+    queryFn: async () => {
+      const { data } = await api.get(`/api/v1/relatorios/vendas?inicio=${dataInicio}&fim=${dataFim}`);
+      return data;
+    },
+    enabled: categoriaAtiva === "vendas"
+  });
+
+  const { data: dadosEstoque, isLoading: loadingEstoque } = useQuery({
+    queryKey: ['relatorio-estoque'],
+    queryFn: async () => {
+      const { data } = await api.get(`/api/v1/relatorios/estoque`);
+      return data;
+    },
+    enabled: categoriaAtiva === "estoque"
+  });
+
+  const { data: dadosDash, isLoading: loadingDash } = useQuery({
+    queryKey: ['dashboard-resumo'],
+    queryFn: async () => {
+      const { data } = await api.get(`/api/v1/dashboard/resumo`);
+      return data;
+    },
+    enabled: categoriaAtiva === "financeiro"
+  });
+
   const baixarRelatorio = (tipo) => toast.success(`Gerando relatório: ${tipo}`);
 
   return (
@@ -259,9 +285,9 @@ export default function RelatoriosDashboard() {
             <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200/50 font-medium text-slate-600 hover:border-[#34BFBF]/40 transition-all group">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-[#34BFBF]">Período:</span>
                 <Calendar className="h-4 w-4 text-slate-400 group-hover:text-[#34BFBF]" />
-                <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className="bg-transparent text-sm font-bold text-slate-700 outline-none w-[115px] cursor-pointer"/>
+                <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className="bg-transparent text-sm font-bold text-[#334155] outline-none w-[115px] cursor-pointer"/>
                 <span className="text-slate-300 text-xs mx-1 group-hover:text-indigo-300">•</span>
-                <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="bg-transparent text-sm font-bold text-slate-700 outline-none w-[115px] cursor-pointer"/>
+                <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="bg-transparent text-sm font-bold text-[#334155] outline-none w-[115px] cursor-pointer"/>
             </div>
             <div className="h-8 w-px bg-slate-100"></div>
             <Button size="sm" variant="ghost" className="text-slate-500 hover:text-emerald-600 flex items-center gap-2" onClick={() => baixarRelatorio('Excel')}>
@@ -289,24 +315,24 @@ export default function RelatoriosDashboard() {
         {categoriaAtiva === "vendas" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <KpiCard title="Faturamento" value="R$ 124k" subtext="+12% YoY" icon={DollarSign} trend="up" />
-                <KpiCard title="Itens/Cupom" value="2.4" subtext="Meta: 3.0" icon={ShoppingBag} trend="down" />
-                <KpiCard title="Conversão" value="11.8%" subtext="-0.5% MoM" icon={Target} trend="down" />
-                <KpiCard title="Ticket Médio" value="R$ 145" subtext="+30% vs Mercado" icon={Users} trend="up" />
+                <KpiCard title="Faturamento Bruto" value={formatarMoeda(dadosComercial?.totalFaturado || 0)} subtext="No período" icon={DollarSign} trend="up" />
+                <KpiCard title="Cupom Médio" value={formatarMoeda(dadosComercial?.ticketMedio || 0)} subtext="Média por venda" icon={ShoppingBag} trend="neutral" />
+                <KpiCard title="Total Pedidos" value={dadosComercial?.quantidadeVendas || 0} subtext="Vendas realizadas" icon={Target} trend="up" />
+                <KpiCard title="Lucro Bruto Est." value={formatarMoeda(dadosComercial?.lucroBrutoEstimado || 0)} subtext="Margem Estimada" icon={Users} trend="up" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <SectionHeader icon={BarChart3} title="Performance de Vendas" description="Análise estrutural, tendências e eficácia do funil." />
-                <ChartCard title="Tendência de Vendas" subtitle="Regressão Linear" analysis="Crescimento estrutural positivo confirmado pela linha de tendência." className="md:col-span-2" onDownload={() => baixarRelatorio('tendencia')}>
+                <ChartCard title="Tendência Diária" subtitle="Realizado" className="md:col-span-2" isLoading={loadingVendas} onDownload={() => baixarRelatorio('tendencia')}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={mockVendasTendencia} margin={{top: 10, right: 10, left: -10, bottom: 0}}>
+                    <ComposedChart data={dadosComercial?.vendasDiarias || []} margin={{top: 10, right: 10, left: -10, bottom: 0}}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.grid} />
-                      <XAxis dataKey="dia" axisLine={false} tickLine={false} tick={{fill: BRAND.slate, fontSize: 12, fontWeight: 500}} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate, fontSize: 12, fontWeight: 500}} tickFormatter={v => `${v/1000}k`} />
+                      <XAxis dataKey="data" tickFormatter={formatarDataCurta} tick={{fill: BRAND.slate, fontSize: 12, fontWeight: 500}} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate, fontSize: 12, fontWeight: 500}} tickFormatter={v => `R$${v}`} />
                       <Tooltip content={<CustomTooltipContent />} />
                       <Legend />
-                      <Area type="monotone" dataKey="atual" name="Vendas (Real)" fill="url(#gradTeal)" stroke={BRAND.teal} strokeWidth={4} />
-                      <Line type="monotone" dataKey="tendencia" name="Tendência" stroke={BRAND.amber} strokeWidth={3} dot={false} strokeDasharray="8 8" />
+                      <Area type="monotone" dataKey="total" name="Vendas" fill="url(#gradTeal)" stroke={BRAND.teal} strokeWidth={4} />
+                      <Line type="monotone" name="Tendência" stroke="#f59e0b" strokeWidth={3} dot={false} strokeDasharray="8 8" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </ChartCard>
@@ -329,7 +355,7 @@ export default function RelatoriosDashboard() {
                        <XAxis dataKey="mes" axisLine={false} tickLine={false} dy={10} tick={{fill: BRAND.slate, fontWeight: 500}} />
                        <YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate, fontWeight: 500}} tickFormatter={v => `${v/1000}k`}/>
                        <Tooltip content={<CustomTooltipContent />} />
-                       <Legend wrapperStyle={{paddingTop: 20}} formatter={(value) => <span className="text-slate-600 font-semibold text-xs">{value}</span>}/>
+                       <Legend verticalAlign="top" iconType="circle" />
                        <Bar dataKey="novos" name="Novos" stackId="a" fill={BRAND.teal} stroke="white" strokeWidth={2} radius={[0,0,8,8]} fillOpacity={0.8} />
                        <Bar dataKey="recorrentes" name="Fiéis" stackId="a" fill={BRAND.softPink} stroke="white" strokeWidth={2} radius={[8,8,0,0]} fillOpacity={0.8} />
                      </BarChart>
@@ -368,34 +394,34 @@ export default function RelatoriosDashboard() {
                      </BarChart>
                    </ResponsiveContainer>
                 </ChartCard>
-                <ChartCard title="Top Marcas" onDownload={() => baixarRelatorio('marcas')}>
+                <ChartCard title="Ranking Marcas" isLoading={loadingVendas} onDownload={() => baixarRelatorio('marcas')}>
                    <ResponsiveContainer width="100%" height="100%">
-                     <BarChart data={mockMarcas} margin={{top: 10}}>
-                       <XAxis dataKey="name" tick={{fontSize: 10, fill: BRAND.slate, fontWeight: 500}} axisLine={false} tickLine={false} dy={5} />
+                     <BarChart data={dadosComercial?.rankingMarcas || []} margin={{top: 10}}>
+                       <XAxis dataKey="nome" tick={{fontSize: 10, fill: BRAND.slate, fontWeight: 500}} axisLine={false} tickLine={false} dy={5} />
                        <Tooltip content={<CustomTooltipContent />} />
-                       <Bar dataKey="atual" fill={BRAND.pink} radius={[8,8,0,0]} barSize={40} />
+                       <Bar dataKey="faturamento" fill={BRAND.pink} radius={[8,8,0,0]} barSize={40} />
                      </BarChart>
                    </ResponsiveContainer>
                 </ChartCard>
-                <ChartCard title="Meios de Pagamento" onDownload={() => baixarRelatorio('pgto')}>
+                <ChartCard title="Meios de Pagamento" isLoading={loadingVendas} onDownload={() => baixarRelatorio('pgto')}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart><Pie data={mockPagamentos} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">{mockPagamentos.map((e, i) => <Cell key={i} fill={[BRAND.teal, BRAND.pink, BRAND.softPink, BRAND.purple][i % 4]} />)}</Pie><Tooltip /><Legend verticalAlign="bottom" iconType="circle" /></PieChart>
+                    <PieChart><Pie data={dadosComercial?.porPagamento || []} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="total" nameKey="formaPagamento">{ (dadosComercial?.porPagamento || []).map((e, i) => <Cell key={i} fill={BRAND_PALETTE[i % BRAND_PALETTE.length]} />)}</Pie><Tooltip content={<CustomTooltipContent />} /><Legend verticalAlign="bottom" iconType="circle" /></PieChart>
                   </ResponsiveContainer>
                 </ChartCard>
                 <ChartCard title="Fluxo Horário" onDownload={() => baixarRelatorio('fluxo')}>
                   <ResponsiveContainer width="100%" height="100%"><AreaChart data={mockHorarios}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke={BRAND.grid}/><XAxis dataKey="hora" tick={{fill: BRAND.slate}} /><YAxis hide/><Tooltip/><Area type="monotone" dataKey="fluxo" stroke={BRAND.teal} fill={BRAND.teal} fillOpacity={0.2} /></AreaChart></ResponsiveContainer>
                 </ChartCard>
                 <ChartCard title="Performance Semanal" onDownload={() => baixarRelatorio('semana')}>
-                   <ResponsiveContainer width="100%" height="100%"><RadarChart cx="50%" cy="50%" outerRadius="70%" data={mockDiasSemana}><PolarGrid stroke={BRAND.grid} /><PolarAngleAxis dataKey="dia" tick={{fill: BRAND.slate, fontSize: 10}} /><Radar name="Vendas" dataKey="valor" stroke={BRAND.pink} fill={BRAND.pink} fillOpacity={0.6} /><Tooltip /></RadarChart></ResponsiveContainer>
+                   <ResponsiveContainer width="100%" height="100%"><RadarChart cx="50%" cy="50%" outerRadius="70%" data={mockDiasSemana}><PolarGrid stroke={BRAND.grid} /><PolarAngleAxis dataKey="dia" tick={{fill: BRAND.slate, fontSize: 10}} /><PolarRadiusAxis /><Radar name="Vendas" dataKey="valor" stroke={BRAND.pink} fill={BRAND.pink} fillOpacity={0.6} /><Tooltip /></RadarChart></ResponsiveContainer>
                 </ChartCard>
                 <ChartCard title="Origem do Cliente" onDownload={() => baixarRelatorio('origem')}>
                    <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={mockOrigem} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">{mockOrigem.map((e, i) => <Cell key={i} fill={e.fill} />)}</Pie><Tooltip /><Legend verticalAlign="bottom" iconType="circle" /></PieChart></ResponsiveContainer>
                 </ChartCard>
                 <ChartCard title="Evolução YoY" subtitle="Mês Atual vs Anterior" className="md:col-span-2" onDownload={() => baixarRelatorio('yoy')}>
-                   <ResponsiveContainer width="100%" height="100%"><AreaChart data={mockVendasComparativo} margin={{top: 10, right: 10, left: -10, bottom: 0}}><CartesianGrid stroke={BRAND.grid} vertical={false} /><XAxis dataKey="dia" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><Tooltip content={<CustomTooltipContent showDelta={true} />} /><Legend verticalAlign="top" align="right" /><Area type="monotone" dataKey="anterior" name="Ano Anterior" stroke={BRAND.slate} strokeDasharray="5 5" fill="transparent" /><Area type="monotone" dataKey="atual" name="Ano Atual" stroke={BRAND.teal} fill="url(#gradTeal)" /></AreaChart></ResponsiveContainer>
+                   <ResponsiveContainer width="100%" height="100%"><AreaChart data={mockVendasComparativo} margin={{top: 10, right: 10, left: -10, bottom: 0}}><CartesianGrid stroke={BRAND.grid} vertical={false} /><XAxis dataKey="dia" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><Tooltip content={<CustomTooltipContent />} /><Legend verticalAlign="top" align="right" /><Area type="monotone" dataKey="anterior" name="Ano Anterior" stroke={BRAND.slate} strokeDasharray="5 5" fill="transparent" /><Area type="monotone" dataKey="atual" name="Ano Atual" stroke={BRAND.teal} fill="url(#gradTeal)" /></AreaChart></ResponsiveContainer>
                 </ChartCard>
-                <ChartCard title="Categorias MoM" subtitle="Variação Mensal" onDownload={() => baixarRelatorio('categorias')}>
-                   <ResponsiveContainer width="100%" height="100%"><BarChart data={mockCategoriasMoM}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke={BRAND.grid}/><XAxis dataKey="name" tick={{fill: BRAND.slate, fontSize: 10}} /><YAxis tick={{fill: BRAND.slate, fontSize: 10}}/><Tooltip /><Legend verticalAlign="top" align="right"/><Bar dataKey="anterior" name="Anterior" fill={BRAND.slate} radius={[4,4,0,0]} fillOpacity={0.6} /><Bar dataKey="atual" name="Atual" fill={BRAND.teal} radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>
+                <ChartCard title="Categorias" subtitle="Comparativo de Volume" isLoading={loadingVendas}>
+                   <ResponsiveContainer width="100%" height="100%"><BarChart data={dadosComercial?.porCategoria || []}><CartesianGrid vertical={false} stroke={BRAND.grid}/><XAxis dataKey="categoria" tick={{fill: BRAND.slate, fontSize: 10}} /><YAxis tick={{fill: BRAND.slate, fontSize: 10}}/><Tooltip content={<CustomTooltipContent />} /><Bar dataKey="total" name="Atual" fill={BRAND.teal} radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>
                 </ChartCard>
                 <ChartCard title="Ticket vs Benchmark" onDownload={() => baixarRelatorio('ticket')}>
                    <ResponsiveContainer width="100%" height="100%"><BarChart data={mockTicket}><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><Tooltip /><ReferenceLine y={110} stroke={BRAND.pink} strokeDasharray="3 3" label={{value: 'Média', fill: BRAND.pink, fontSize: 10}} /><Bar dataKey="valor" fill={BRAND.teal}>{mockTicket.map((e,i) => <Cell key={i} fill={i===0 ? BRAND.teal : BRAND.slate}/>)}</Bar></BarChart></ResponsiveContainer>
@@ -404,13 +430,13 @@ export default function RelatoriosDashboard() {
           </div>
         )}
 
-        {/* ================= ABA ESTOQUE ================= */}
+        {/* ================= ABA ESTOQUE (DINÂMICA) ================= */}
         {categoriaAtiva === "estoque" && (
            <div className="space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <KpiCard title="Valor em Estoque" value="R$ 450k" subtext="Custo" icon={PackageCheck} trend="neutral" />
-                <KpiCard title="Itens Sem Giro" value="8%" subtext=">90 dias" icon={Clock} trend="up" />
-                <KpiCard title="Ruptura Atual" value="2.8%" subtext="Meta: <2%" icon={AlertTriangle} trend="down" />
+                <KpiCard title="Custo em Estoque" value={formatarMoeda(dadosEstoque?.valorTotalCusto || 0)} subtext="Patrimônio imobilizado" icon={PackageCheck} trend="neutral" />
+                <KpiCard title="Venda Total Projetada" value={formatarMoeda(dadosEstoque?.valorTotalVenda || 0)} subtext="Potencial de faturamento" icon={DollarSign} trend="up" />
+                <KpiCard title="Mix de Produtos" value={dadosEstoque?.totalProdutos || 0} subtext="Itens cadastrados" icon={Briefcase} trend="up" />
 
                 <SectionHeader icon={Target} title="Inteligência de Portfólio" description="Análise de rentabilidade, giro e concentração de estoque." />
                 <ChartCard title="Curva ABC (Pareto)" subtitle="Concentração de Receita" className="md:col-span-2" onDownload={() => baixarRelatorio('abc')}>
@@ -422,59 +448,64 @@ export default function RelatoriosDashboard() {
                        </ComposedChart>
                     </ResponsiveContainer>
                 </ChartCard>
+                <ChartCard title="Aging de Estoque" onDownload={() => baixarRelatorio('aging')}>
+                    <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={mockAging} innerRadius={70} outerRadius={90} paddingAngle={4} dataKey="value" stroke="white" strokeWidth={3}>{mockAging.map((e, i) => <Cell key={i} fill={[BRAND.teal, BRAND.softPink, BRAND.purple, BRAND.amber][i % 4]} />)}</Pie><Tooltip content={<CustomTooltipContent />} /><Legend verticalAlign="bottom" iconType="circle" /></PieChart></ResponsiveContainer>
+                </ChartCard>
                 <ChartCard title="Matriz BCG" subtitle="Margem vs Giro" onDownload={() => baixarRelatorio('bcg')}>
                    <ResponsiveContainer width="100%" height="100%">
                       <ScatterChart margin={{top:20,right:20,bottom:10,left:0}}><CartesianGrid stroke={BRAND.grid} strokeDasharray="3 3" /><XAxis type="number" dataKey="x" name="Vendas" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><YAxis type="number" dataKey="y" name="Margem" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><ZAxis type="number" dataKey="z" range={[100,600]} /><Tooltip cursor={{strokeDasharray:'3 3'}} content={<CustomTooltipContent />} /><Scatter name="Produtos" data={mockBCG} fill={BRAND.teal}>{mockBCG.map((e, i) => <Cell key={i} fill={e.fill} />)}</Scatter></ScatterChart>
                    </ResponsiveContainer>
                 </ChartCard>
-
-                <SectionHeader icon={Microscope} title="Eficiência e Riscos" description="Aging, ruptura e cobertura para evitar perdas." />
-                <ChartCard title="Aging de Estoque" onDownload={() => baixarRelatorio('aging')}>
-                    <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={mockAging} innerRadius={70} outerRadius={90} paddingAngle={4} dataKey="value" stroke="white" strokeWidth={3}>{mockAging.map((e, i) => <Cell key={i} fill={[BRAND.teal, BRAND.softPink, BRAND.purple, BRAND.amber][i % 4]} />)}</Pie><Tooltip /><Legend verticalAlign="bottom" iconType="circle" /></PieChart></ResponsiveContainer>
-                </ChartCard>
-                <ChartCard title="Evolução da Ruptura" onDownload={() => baixarRelatorio('ruptura')}>
-                    <ResponsiveContainer width="100%" height="100%"><AreaChart data={mockRuptura} margin={{top: 10, right: 10, left: -20, bottom: 0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.grid} /><XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><Tooltip /><Area type="monotone" dataKey="taxa" stroke={BRAND.pink} fill="url(#gradPink)" strokeWidth={3} /></AreaChart></ResponsiveContainer>
+                <ChartCard title="Evolução Ruptura" onDownload={() => baixarRelatorio('ruptura')}>
+                    <ResponsiveContainer width="100%" height="100%"><AreaChart data={mockRuptura} margin={{left: -20}}><CartesianGrid vertical={false} stroke={BRAND.grid} /><XAxis dataKey="mes" /><Tooltip /><Area type="monotone" dataKey="taxa" stroke={BRAND.red} fill={BRAND.red} fillOpacity={0.1} strokeWidth={3} /></AreaChart></ResponsiveContainer>
                 </ChartCard>
                 <ChartCard title="Cobertura (Dias)" onDownload={() => baixarRelatorio('cobertura')}>
                     <ResponsiveContainer width="100%" height="100%"><BarChart data={mockCobertura} layout="vertical"><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={70} axisLine={false} tickLine={false} tick={{fill: BRAND.dark, fontWeight: 600}} /><Tooltip /><ReferenceLine x={30} stroke={BRAND.teal} strokeDasharray="3 3" /><Bar dataKey="dias" fill={BRAND.amber} radius={[0,8,8,0]} barSize={28} /></BarChart></ResponsiveContainer>
                 </ChartCard>
 
-                <SectionHeader icon={PackageCheck} title="Gestão de Inventário" description="Visão por categoria e controle de validade." />
-                <ChartCard title="Valor em Estoque" onDownload={() => baixarRelatorio('estoque_valor')} className="md:col-span-2">
-                   <ResponsiveContainer width="100%" height="100%"><BarChart data={mockEstoqueCategorias}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke={BRAND.grid}/><XAxis dataKey="name" tick={{fill: BRAND.slate}} /><YAxis tick={{fill: BRAND.slate}}/><Tooltip/><Bar dataKey="valor" fill={BRAND.teal} radius={[6,6,0,0]} barSize={50} /></BarChart></ResponsiveContainer>
+                <SectionHeader icon={Microscope} title="Saúde do Inventário" description=" Aging e monitoramento de validade." />
+                <ChartCard title="Top 10 Valorizado" className="md:col-span-2" isLoading={loadingEstoque}>
+                   <ResponsiveContainer width="100%" height="100%">
+                     <BarChart data={dadosEstoque?.rankingFinanceiro || []} margin={{ left: -15 }}>
+                        <XAxis dataKey="nome" tick={{ fill: BRAND.slate, fontSize: 9 }} angle={-15} textAnchor="end" interval={0} height={50} />
+                        <Tooltip content={<CustomTooltipContent />} /><Bar dataKey="valorTotal" name="Custo Total" fill={BRAND.teal} radius={[8,8,0,0]} barSize={35} />
+                     </BarChart>
+                   </ResponsiveContainer>
                 </ChartCard>
-                <ChartCard title="Risco de Validade" onDownload={() => baixarRelatorio('validade')}>
-                    <ResponsiveContainer width="100%" height="100%"><BarChart data={mockValidade} layout="vertical"><XAxis type="number" hide/><YAxis dataKey="periodo" type="category" width={50} tick={{fill: BRAND.slate}}/><Tooltip/><Bar dataKey="valor" fill={BRAND.pink} radius={[0,4,4,0]} /></BarChart></ResponsiveContainer>
+                <ChartCard title="Saldo Crítico">
+                   <div className="space-y-3 overflow-y-auto max-h-[250px] pr-2">
+                      {(dadosEstoque?.produtosAbaixoMinimo || []).map((prod, i) => (
+                        <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100"><p className="text-xs font-bold text-slate-700 truncate w-2/3">{prod.nome}</p><span className="text-[10px] bg-red-100 text-red-600 px-2 py-1 rounded-full font-black">QTD: {prod.quantidade}</span></div>
+                      ))}
+                   </div>
                 </ChartCard>
              </div>
            </div>
         )}
 
-        {/* ================= ABA FINANCEIRO ================= */}
+        {/* ================= ABA FINANCEIRO (INTEGRADO AO DASHBOARD RESUMO) ================= */}
         {categoriaAtiva === "financeiro" && (
            <div className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <KpiCard title="Lucro Líquido" value="R$ 32.400" subtext="Margem: 26%" icon={DollarSign} trend="up" />
-                  <KpiCard title="CMV Global" value="36%" subtext="Custo de Venda" icon={PackageCheck} trend="down" />
-                  <KpiCard title="Taxa Desconto" value="4.8%" subtext="Impacto Margem" icon={Percent} trend="down" />
-                  <KpiCard title="Saldo Previsto" value="R$ 15k" subtext="Próx. 7 dias" icon={Wallet} trend="neutral" />
-
-                  <SectionHeader icon={Wallet} title="Gestão de Caixa e Lucratividade" description="Entradas, saídas e demonstração visual de resultados." />
-                  <ChartCard title="Fluxo de Caixa Diário" subtitle="Entradas vs Saídas" fullWidth onDownload={() => baixarRelatorio('fluxo_caixa')}>
+                  <KpiCard title="Saldo em Caixa" value={formatarMoeda(dadosDash?.saldoDoDia || 0)} subtext="No caixa hoje" icon={Wallet} trend="neutral" />
+                  <KpiCard title="A Pagar Hoje" value={formatarMoeda(dadosDash?.aPagarHoje || 0)} icon={ArrowDownCircle} trend="down" />
+                  <KpiCard title="A Receber Hoje" value={formatarMoeda(dadosDash?.aReceberHoje || 0)} icon={ArrowUpCircle} trend="up" />
+                  <KpiCard title="Vencidos" value={formatarMoeda(dadosDash?.totalVencido || 0)} icon={AlertTriangle} trend="down" />
+                  <SectionHeader icon={Wallet} title="Fluxo Semanal" description="Entradas vs Saídas diárias." />
+                  <ChartCard title="Movimentação" fullWidth isLoading={loadingDash}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={mockFluxoCaixa} margin={{top: 20, right: 20, left: 0, bottom: 0}}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.grid} /><XAxis dataKey="dia" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} dy={10} /><YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><Tooltip content={<CustomTooltipContent />} /><Legend wrapperStyle={{paddingTop: 20}} />
-                        <Bar dataKey="entrada" name="Entradas" fill={BRAND.teal} barSize={18} radius={[4,4,0,0]} /><Bar dataKey="saida" name="Saídas" fill={BRAND.purple} barSize={18} radius={[4,4,0,0]} /><Line type="monotone" dataKey="saldo" name="Saldo" stroke={BRAND.pink} strokeWidth={4} />
+                      <ComposedChart data={(dadosDash?.projecaoSemanal || []).map(i => ({ name: formatarDataCurta(i.data), entrada: i.aReceber, saida: i.aPagar, saldo: i.saldoPrevisto }))} margin={{top: 20, right: 20, left: 0, bottom: 0}}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.grid} /><XAxis dataKey="name" axisLine={false} tickLine={false} dy={10} tick={{fill: BRAND.slate}} /><YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} />
+                        <Tooltip content={<CustomTooltipContent />} /><Legend verticalAlign="top" align="center" iconType="circle" /><Bar dataKey="entrada" name="Entradas" fill={BRAND.teal} radius={[4,4,0,0]} barSize={20} /><Bar dataKey="saida" name="Saídas" fill="#fca5a5" radius={[4,4,0,0]} barSize={20} /><Line type="monotone" dataKey="saldo" name="Saldo" stroke={BRAND.pink} strokeWidth={4} dot={{fill: BRAND.pink, stroke: 'white'}} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </ChartCard>
-
-                  <SectionHeader icon={Scale} title="Análise de Resultados" description="Composição de custos e detalhamento operacional." />
-                  <ChartCard title="DRE Visual (Waterfall)" subtitle="Erosão da Receita" className="md:col-span-2" onDownload={() => baixarRelatorio('dre')}>
-                    <ResponsiveContainer width="100%" height="100%"><BarChart data={mockDRE} margin={{top: 20, bottom: 20}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.grid} /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fill: BRAND.dark, fontWeight: 600}} interval={0} /><YAxis axisLine={false} tickLine={false} hide /><Tooltip content={<CustomTooltipContent />} /><Bar dataKey="valor" stroke="white" strokeWidth={2}>{mockDRE.map((e, i) => <Cell key={i} fill={e.fill} radius={[8,8,8,8]} />)}</Bar></BarChart></ResponsiveContainer>
+                  <SectionHeader icon={Scale} title="Demonstrativo" description="Erosão da receita." />
+                  <ChartCard title="DRE Visual" className="md:col-span-2" onDownload={() => baixarRelatorio('dre')}>
+                    <ResponsiveContainer width="100%" height="100%"><BarChart data={mockDRE} margin={{top: 20, bottom: 20}}><CartesianGrid vertical={false} stroke={BRAND.grid}/><XAxis dataKey="name" tick={{fontSize: 11, fill: BRAND.dark}} /><YAxis hide /><Tooltip content={<CustomTooltipContent />} /><Bar dataKey="valor" stroke="white" strokeWidth={2}>{mockDRE.map((e, i) => <Cell key={i} fill={e.fill} radius={[8,8,8,8]} />)}</Bar></BarChart></ResponsiveContainer>
                   </ChartCard>
-                  <ChartCard title="Detalhamento de Despesas" onDownload={() => baixarRelatorio('despesas')}>
-                    <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={mockDespesasDetalhadas} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">{mockDespesasDetalhadas.map((e, i) => <Cell key={i} fill={[BRAND.teal, BRAND.purple, BRAND.pink, BRAND.amber, BRAND.softPink][i % 5]} />)}</Pie><Tooltip /><Legend verticalAlign="bottom" iconType="circle" /></PieChart></ResponsiveContainer>
+                  <ChartCard title="Despesas Fixas" onDownload={() => baixarRelatorio('despesas')}>
+                    <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={mockDespesasDetalhadas} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">{mockDespesasDetalhadas.map((e, i) => <Cell key={i} fill={BRAND_PALETTE[i % 5]} />)}</Pie><Tooltip content={<CustomTooltipContent />} /><Legend verticalAlign="bottom" iconType="circle" /></PieChart></ResponsiveContainer>
                   </ChartCard>
                </div>
            </div>
@@ -484,27 +515,15 @@ export default function RelatoriosDashboard() {
         {categoriaAtiva === "fiscal" && (
            <div className="space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <KpiCard title="Recuperação DAS" value="R$ 3.200" subtext="No último mês" icon={PiggyBank} trend="up" />
-                <KpiCard title="Carga Tributária" value="5.1%" subtext="Alíquota Efetiva" icon={Scale} trend="down" />
-                <KpiCard title="NCMs Inválidos" value="45" subtext="Ação Requerida" icon={ShieldAlert} trend="down" />
-
-                <SectionHeader icon={PiggyBank} title="Eficiência Tributária" description="Recuperação de créditos e monitoramento da carga." />
-                <ChartCard title="Segregação de Receita" subtitle="Impacto no PIS/COFINS" onDownload={() => baixarRelatorio('fiscal_segregacao')}>
-                   <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={mockFiscalSegregacao} innerRadius={70} outerRadius={90} dataKey="value" paddingAngle={4} stroke="white" strokeWidth={3}>{mockFiscalSegregacao.map((e, i) => <Cell key={i} fill={[BRAND.amber, BRAND.slate, BRAND.teal][i % 3]} />)}</Pie><Tooltip /><Legend verticalAlign="bottom" iconType="circle" /></PieChart></ResponsiveContainer>
+                <KpiCard title="Recuperação" value="R$ 3.200" subtext="No Mês" icon={PiggyBank} trend="up" />
+                <KpiCard title="Alíquota" value="5.1%" subtext="Faixa" icon={Scale} trend="down" />
+                <KpiCard title="Audit" value="45" subtext="Erros NCM" icon={ShieldAlert} trend="down" />
+                <SectionHeader icon={ShieldAlert} title="Conformidade" description="Monofásicos e NCMs." />
+                <ChartCard title="Receita Segregada">
+                   <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={mockFiscalSegregacao} innerRadius={70} outerRadius={90} dataKey="value" stroke="white" strokeWidth={3}>{mockFiscalSegregacao.map((e, i) => <Cell key={i} fill={e.fill} />)}</Pie><Tooltip /><Legend verticalAlign="bottom" iconType="circle" /></PieChart></ResponsiveContainer>
                 </ChartCard>
-                <ChartCard title="Economia Gerada" subtitle="Imposto Pago vs Economizado" className="md:col-span-2" onDownload={() => baixarRelatorio('fiscal_economia')}>
-                   <ResponsiveContainer width="100%" height="100%"><BarChart data={mockFiscalEconomia} margin={{top: 20, right: 20}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.grid} /><XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><YAxis axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><Tooltip content={<CustomTooltipContent />} /><Legend verticalAlign="top" iconType="circle" /><Bar dataKey="pago" name="Pago" stackId="a" fill={BRAND.pink} radius={[0,0,4,4]} fillOpacity={0.6} /><Bar dataKey="economizado" name="Economizado" stackId="a" fill={BRAND.teal} radius={[8,8,0,0]} /></BarChart></ResponsiveContainer>
-                </ChartCard>
-                <ChartCard title="Evolução Carga Tributária" onDownload={() => baixarRelatorio('fiscal_carga')}>
-                   <ResponsiveContainer width="100%" height="100%"><ComposedChart data={mockFiscalCarga} margin={{top: 20, right: 0, left: -10, bottom: 0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.grid} /><XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} dy={10} /><YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{fill: BRAND.slate}} /><YAxis yAxisId="right" orientation="right" unit="%" axisLine={false} tickLine={false} tick={{fill: BRAND.purple, fontWeight: 'bold'}} /><Tooltip content={<CustomTooltipContent />} /><Legend verticalAlign="top" align="right" /><Bar yAxisId="left" dataKey="fat" name="Faturamento" fill={BRAND.grid} barSize={40} radius={[8,8,0,0]} /><Line yAxisId="right" type="monotone" dataKey="carga" name="Carga (%)" stroke={BRAND.purple} strokeWidth={4} dot={{r:5, fill: BRAND.purple, stroke: 'white', strokeWidth: 2}} /></ComposedChart></ResponsiveContainer>
-                </ChartCard>
-
-                <SectionHeader icon={ShieldAlert} title="Compliance e Operações" description="Auditoria de cadastro e operações fiscais (CFOP)." />
-                <ChartCard title="Operações Fiscais" onDownload={() => baixarRelatorio('fiscal_cfop')}>
-                   <ResponsiveContainer width="100%" height="100%"><BarChart data={mockFiscalCFOP} layout="vertical" margin={{left: 20, right: 20, top: 20}}><CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={BRAND.grid} /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12, fill: BRAND.dark, fontWeight: 600}} axisLine={false} tickLine={false} /><Tooltip content={<CustomTooltipContent />} /><Bar dataKey="value" name="Qtd" radius={[0,10,10,0]} barSize={32}>{mockFiscalCFOP.map((e, i) => <Cell key={i} fill={[BRAND.teal, BRAND.pink, BRAND.softPink][i % 3]} stroke="white" strokeWidth={2} />)}</Bar></BarChart></ResponsiveContainer>
-                </ChartCard>
-                <ChartCard title="Auditoria de Cadastro" className="md:col-span-2" onDownload={() => baixarRelatorio('auditoria')}>
-                    <ResponsiveContainer width="100%" height="100%"><BarChart data={mockAuditoria} layout="vertical" margin={{top: 10}}><XAxis type="number" hide/><YAxis dataKey="item" type="category" width={80} tick={{fill: BRAND.slate}}/><Tooltip/><Bar dataKey="qtd" fill={BRAND.teal} radius={[0,4,4,0]} barSize={30} /></BarChart></ResponsiveContainer>
+                <ChartCard title="Economia DAS" className="md:col-span-2">
+                   <ResponsiveContainer width="100%" height="100%"><BarChart data={mockFiscalEconomia} margin={{top: 20}}><CartesianGrid vertical={false} stroke={BRAND.grid} /><XAxis dataKey="mes" tick={{fill: BRAND.slate}} /><YAxis hide /><Tooltip content={<CustomTooltipContent />} /><Legend verticalAlign="top" iconType="circle" /><Bar dataKey="economizado" name="Economia Realizada" fill={BRAND.teal} radius={[8,8,0,0]} /></BarChart></ResponsiveContainer>
                 </ChartCard>
              </div>
            </div>
@@ -513,26 +532,3 @@ export default function RelatoriosDashboard() {
     </div>
   );
 }
-
-// ============= COMPONENTES DE APOIO INTERNOS =============
-const CustomTooltipContent = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white border border-slate-100 shadow-2xl rounded-xl p-4 min-w-[150px]">
-        <p className="font-bold text-slate-400 text-[10px] mb-3 uppercase tracking-wider">{label}</p>
-        {payload.map((entry, index) => (
-          <div key={index} className="flex items-center justify-between gap-4 mb-2 last:mb-0">
-            <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color || entry.fill }}></div>
-                <span className="text-[#334155] text-xs font-semibold">{entry.name}</span>
-            </div>
-            <span className="font-bold text-[#334155] text-xs tabular-nums">
-               {typeof entry.value === 'number' && Math.abs(entry.value) > 100 ? `R$ ${Math.abs(entry.value).toLocaleString('pt-BR')}` : entry.value}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
