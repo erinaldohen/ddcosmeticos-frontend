@@ -1,95 +1,85 @@
 import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { Loader2, Lock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Lock, Mail, Loader2, LogIn, AlertTriangle, UserCircle } from "lucide-react";
+import { toast } from "react-hot-toast";
+import api from "@/services/api";
 
 export default function Login() {
-  const navigate = useNavigate();
-  const { login } = useAuth();
-
-  const [identifier, setIdentifier] = useState("admin@dd.com"); // Matrícula ou E-mail
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [form, setForm] = useState({ login: "", senha: "" });
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
+    if (!form.login || !form.senha) return toast.error("Preencha usuário e senha.");
 
+    setLoading(true);
     try {
-        await login(identifier, password);
-        navigate("/dashboard");
-    } catch (err) {
-        const msg = err.response?.data?.message || "Acesso negado: Verifique suas credenciais.";
-        setError(msg);
-        setLoading(false);
+      const payload = {
+          matricula: form.login.trim(),
+          senha: form.senha
+      };
+
+      const { data } = await api.post("/api/v1/auth/login", payload);
+
+      // 1. Salva o Token
+      localStorage.setItem("dd-token", data.token);
+      localStorage.setItem("usuario", JSON.stringify({
+          nome: data.nome,
+          perfil: data.perfil
+      }));
+
+      toast.success(`Bem-vindo, ${data.nome}!`);
+
+      // 2. FORÇA O REDIRECIONAMENTO (Isso corrige o bug da tela travada)
+      setTimeout(() => {
+          window.location.href = "/vendas";
+      }, 500);
+
+    } catch (error) {
+      console.error(error);
+      const msg = error.response?.data?.message || "Usuário ou senha incorretos";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F2F2F2] p-4 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-64 bg-[#34BFBF]/10 -skew-y-3 origin-top transform -z-10"></div>
-
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
-        <div className="pt-10 pb-6 text-center px-8">
-            <div className="h-16 w-16 bg-[#34BFBF] rounded-xl mx-auto flex items-center justify-center shadow-lg shadow-[#34BFBF]/30 mb-6">
-                <span className="text-3xl font-bold text-white">D</span>
-            </div>
-            <h1 className="text-2xl font-bold text-[#34BFBF] tracking-tight">DD <span className="text-[#F26BB5]">Cosméticos</span></h1>
-            <p className="text-slate-500 mt-2 text-sm">Faça login para acessar o sistema.</p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
+        <div className="text-center mb-8">
+          <img src="/logo-ddcosmeticos.png" alt="D&D Cosméticos" className="h-16 mx-auto mb-4 object-contain" />
+          <h1 className="text-2xl font-bold text-slate-700">Acesso ao Sistema</h1>
+          <p className="text-slate-400 text-sm">Entre com suas credenciais</p>
         </div>
 
-        <div className="px-8 pb-10">
-            <form onSubmit={handleLogin} className="space-y-5">
-                {error && (
-                    <div className="bg-red-50 text-red-600 text-xs font-medium p-3 rounded-lg border border-red-100 flex items-center justify-center gap-2">
-                        <AlertTriangle className="h-4 w-4"/> {error}
-                    </div>
-                )}
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="relative">
+            <User className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+            <Input
+              className="pl-10 h-11"
+              placeholder="Matrícula / Usuário"
+              value={form.login}
+              onChange={e => setForm({...form, login: e.target.value})}
+              autoFocus
+            />
+          </div>
+          <div className="relative">
+            <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+            <Input
+              type="password"
+              className="pl-10 h-11"
+              placeholder="Senha"
+              value={form.senha}
+              onChange={e => setForm({...form, senha: e.target.value})}
+            />
+          </div>
 
-                <div className="space-y-2">
-                    <Label className="text-slate-700 font-semibold text-xs uppercase tracking-wide">E-mail ou Matrícula</Label>
-                    <div className="relative group">
-                        <UserCircle className="absolute left-3 top-3 h-4 w-4 text-slate-400 group-focus-within:text-[#34BFBF] transition-colors" />
-                        <Input
-                            type="text"
-                            className="pl-10 h-11 border-slate-200 focus:border-[#34BFBF] focus:ring-[#34BFBF]"
-                            placeholder="matrícula ou e-mail"
-                            value={identifier}
-                            onChange={(e) => setIdentifier(e.target.value)}
-                            autoComplete="username"
-                            required
-                        />
-                    </div>
-                </div>
-
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                        <Label className="text-slate-700 font-semibold text-xs uppercase tracking-wide">Senha</Label>
-                    </div>
-                    <div className="relative group">
-                        <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400 group-focus-within:text-[#34BFBF] transition-colors" />
-                        <Input
-                            type="password"
-                            className="pl-10 h-11 border-slate-200 focus:border-[#34BFBF] focus:ring-[#34BFBF]"
-                            placeholder="••••••"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            autoComplete="current-password"
-                            required
-                        />
-                    </div>
-                </div>
-
-                <Button className="w-full bg-[#34BFBF] hover:bg-[#2aa8a8] h-12 text-base font-bold shadow-lg shadow-[#34BFBF]/30 transition-all active:scale-95 text-white" disabled={loading}>
-                    {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <span className="flex items-center gap-2">Acessar Sistema <LogIn className="h-4 w-4"/></span>}
-                </Button>
-            </form>
-        </div>
+          <Button type="submit" className="w-full h-11 bg-[#F22998] hover:bg-[#d91e85] text-lg font-bold shadow-lg transition-all" disabled={loading}>
+            {loading ? <Loader2 className="animate-spin" /> : "ENTRAR"}
+          </Button>
+        </form>
       </div>
     </div>
   );
