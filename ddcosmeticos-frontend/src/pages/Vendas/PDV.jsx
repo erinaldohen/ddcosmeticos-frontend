@@ -6,7 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-hot-toast"; // Importação do Toast
+import { toast } from "react-hot-toast";
 import api from "@/services/api";
 import { Cupom } from "@/components/Impressao/Cupom";
 
@@ -26,8 +26,6 @@ export default function PDV() {
   // --- FINANCEIRO ---
   const [pagamentos, setPagamentos] = useState([]);
   const [metodoSelecionado, setMetodoSelecionado] = useState("DINHEIRO");
-
-  // Input agora é string formatada (R$)
   const [valorPagamentoInput, setValorPagamentoInput] = useState("");
   const [desconto, setDesconto] = useState("");
 
@@ -41,77 +39,47 @@ export default function PDV() {
   const timeoutRef = useRef(null);
   const pagamentoRef = useRef(null);
 
-  // --- IDENTIFICAÇÃO DO OPERADOR (Ao carregar) ---
+  // --- IDENTIFICAÇÃO DO OPERADOR ---
   useEffect(() => {
     const usuarioSalvo = localStorage.getItem("usuario") || localStorage.getItem("user");
     if (usuarioSalvo) {
       try {
         const userObj = JSON.parse(usuarioSalvo);
-        setOperador(userObj.nome || userObj.login || userObj.email || "Operador");
-      } catch (e) {
-        setOperador("Operador Local");
-      }
-    } else {
-        setOperador("Caixa 01");
-    }
+        setOperador(userObj.nome || userObj.login || "Operador");
+      } catch (e) { setOperador("Operador Local"); }
+    } else { setOperador("Caixa 01"); }
   }, []);
 
   // --- CÁLCULOS ---
   const subTotal = carrinho.reduce((acc, item) => acc + (item.precoVenda * item.qtd), 0);
-
-  // Tratamento do desconto
   const valorDesconto = desconto ? Number(desconto.replace(/\D/g, "") / 100) : 0;
   const totalVenda = Math.max(0, subTotal - valorDesconto);
-
   const totalPago = pagamentos.reduce((acc, p) => acc + p.valor, 0);
   const restante = Math.max(0, totalVenda - totalPago);
   const troco = totalPago > totalVenda ? totalPago - totalVenda : 0;
 
-  // --- AUTOPREENCHIMENTO INTELIGENTE ---
+  // --- ATUALIZAÇÃO AUTOMÁTICA DO VALOR DE PAGAMENTO ---
   useEffect(() => {
-    if (restante > 0) {
-        const valorFormatado = restante.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-        setValorPagamentoInput(valorFormatado);
-    } else {
-        setValorPagamentoInput("");
-    }
-  }, [restante, carrinho, desconto]);
+    if (restante > 0.01) {
+        setValorPagamentoInput(restante.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+    } else { setValorPagamentoInput(""); }
+  }, [restante]);
 
   const playBeep = () => { try { new Audio(BEEP_SOUND).play(); } catch (e) {} };
 
-  // --- ATALHOS ---
-  useEffect(() => {
-    const handleGlobalKeys = (e) => {
-      if (e.key === "F2") { e.preventDefault(); inputRef.current?.focus(); }
-      if (e.key === "F4") { e.preventDefault(); if(carrinho.length > 0) cancelarVendaTotal(); }
-      if (e.key === "F6") { e.preventDefault(); if(carrinho.length > 0) suspenderVenda(); }
-      if (e.key === "F9") { e.preventDefault(); if (restante <= 0 && carrinho.length > 0) finalizarVenda(); }
-    };
-    window.addEventListener("keydown", handleGlobalKeys);
-    return () => window.removeEventListener("keydown", handleGlobalKeys);
-  }, [carrinho, restante, pagamentos]);
-
-  // --- 1. BUSCA ---
+  // --- BUSCA DE PRODUTOS ---
   const buscarProduto = async (termo) => {
     if (!termo) { setProdutosEncontrados([]); return; }
     setLoadingBusca(true);
     try {
         const { data } = await api.get(`/api/v1/produtos?busca=${termo}`);
-        // Se vier uma página do Spring, pega o content
         const lista = data.content || data;
-
-        if (lista.length === 1 && lista[0].codigoBarras === termo) {
+        if (lista.length === 1 && (lista[0].codigoBarras === termo)) {
             adicionarAoCarrinho(lista[0]);
             playBeep();
             limparBusca();
-        } else {
-            setProdutosEncontrados(lista);
-        }
-    } catch (error) {
-        console.error("Erro busca:", error);
-    } finally {
-        setLoadingBusca(false);
-    }
+        } else { setProdutosEncontrados(lista); }
+    } catch (error) { console.error("Erro busca:", error); } finally { setLoadingBusca(false); }
   };
 
   const handleInputChange = () => {
@@ -122,27 +90,13 @@ export default function PDV() {
     }, 300);
   };
 
-  const handleKeyDown = (e) => {
-      if (e.key === 'Enter') {
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          const valor = inputRef.current?.value;
-          if (valor) buscarProduto(valor);
-      }
-      if (e.key === 'Escape') limparBusca();
-  };
-
   const limparBusca = () => {
-      if (inputRef.current) { inputRef.current.value = ""; inputRef.current.focus(); }
-      setProdutosEncontrados([]);
+    if (inputRef.current) { inputRef.current.value = ""; inputRef.current.focus(); }
+    setProdutosEncontrados([]);
   };
 
-  // --- 2. CARRINHO ---
+  // --- GERENCIAMENTO DO CARRINHO ---
   const adicionarAoCarrinho = (produto) => {
-    // Validação de Validade (FEFO) - Exemplo simples
-    if (produto.quantidadeEmEstoque <= 0) {
-        toast("⚠️ Atenção: Estoque zerado ou negativo!", { icon: "⚠️" });
-    }
-
     setCarrinho(prev => {
       const existente = prev.find(item => item.id === produto.id);
       if (existente) {
@@ -152,186 +106,134 @@ export default function PDV() {
           id: produto.id,
           descricao: produto.descricao,
           precoVenda: produto.precoVenda,
-          estoqueAtual: produto.quantidadeEmEstoque,
+          codigoBarras: produto.codigoBarras,
           qtd: 1
       }];
     });
-    if (produtosEncontrados.length > 0) limparBusca();
+    limparBusca();
   };
 
   const alterarQuantidade = (id, delta) => {
-    setCarrinho(prev => prev.map(item => {
-        if (item.id === id) {
-            const novaQtd = Math.max(1, item.qtd + delta);
-            return { ...item, qtd: novaQtd };
-        }
-        return item;
-    }));
+    setCarrinho(prev => prev.map(item => item.id === id ? { ...item, qtd: Math.max(1, item.qtd + delta) } : item));
   };
 
-  const removerDoCarrinho = (id) => {
-    setCarrinho(prev => prev.filter(item => item.id !== id));
-  };
+  const removerDoCarrinho = (id) => setCarrinho(prev => prev.filter(item => item.id !== id));
 
-  // --- 3. FINANCEIRO INTELIGENTE ---
-
+  // --- FINANCEIRO ---
   const handleValorPagamentoChange = (e) => {
       const valorRaw = e.target.value.replace(/\D/g, "");
-      const numero = Number(valorRaw) / 100;
-      const formatado = numero.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-      setValorPagamentoInput(formatado);
+      setValorPagamentoInput((Number(valorRaw) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
   };
 
   const handleDescontoChange = (e) => {
     const valorRaw = e.target.value.replace(/\D/g, "");
-    const numero = Number(valorRaw) / 100;
-    const formatado = numero.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    setDesconto(formatado);
+    setDesconto((Number(valorRaw) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
   };
 
   const adicionarPagamento = (valorOverride = null) => {
-      let valorParaPagar;
-
-      if (valorOverride) {
-          valorParaPagar = valorOverride;
-      } else {
-          const valorRaw = valorPagamentoInput.replace(/\D/g, "");
-          valorParaPagar = Number(valorRaw) / 100;
-      }
-
-      if (!valorParaPagar || valorParaPagar <= 0) return;
-
-      setPagamentos(prev => [...prev, { formaPagamento: metodoSelecionado, valor: valorParaPagar }]);
+      const valor = valorOverride || Number(valorPagamentoInput.replace(/\D/g, "")) / 100;
+      if (!valor || valor <= 0) return;
+      setPagamentos(prev => [...prev, { formaPagamento: metodoSelecionado, valor: valor, parcelas: 1 }]);
   };
 
-  const removerPagamento = (index) => {
-      setPagamentos(prev => prev.filter((_, i) => i !== index));
-  };
+  const removerPagamento = (index) => setPagamentos(prev => prev.filter((_, i) => i !== index));
 
-  // --- 4. AÇÕES FINAIS ---
-  const gerarPayload = () => {
-      const docLimpo = clienteDocumento.replace(/\D/g, '');
-      return {
-          clienteNome: clienteNome || "Consumidor Final",
-          clienteDocumento: docLimpo.length > 0 ? docLimpo : null,
-          pagamentos: pagamentos,
-          quantidadeParcelas: 1,
-          descontoTotal: valorDesconto,
-          ehOrcamento: false,
-          itens: carrinho.map(item => ({
-              produtoId: item.id,
-              quantidade: item.qtd,
-              precoUnitario: item.precoVenda
-          }))
-      };
-  };
-
+  // --- FINALIZAÇÃO E INTEGRAÇÃO BACKEND ---
   const finalizarVenda = async () => {
-    if (carrinho.length === 0) return;
+    if (carrinho.length === 0) return toast.error("Carrinho vazio!");
+    if (restante > 0.01) return toast.error("Pagamento incompleto!");
+
     setLoadingFinalizar(true);
+    const docLimpo = clienteDocumento.replace(/\D/g, '');
+
+    const payload = {
+        clienteNome: clienteNome || "Consumidor Final",
+        clienteDocumento: docLimpo.length > 0 ? docLimpo : null,
+        descontoTotal: valorDesconto,
+        ehOrcamento: false,
+        apenasItensComNfEntrada: false,
+        pagamentos: pagamentos.map(p => ({
+            formaPagamento: p.formaPagamento,
+            valor: p.valor,
+            parcelas: 1
+        })),
+        itens: carrinho.map(item => ({
+            produtoId: item.id,
+            quantidade: item.qtd,
+            precoUnitario: item.precoVenda
+        }))
+    };
 
     try {
-      const payload = gerarPayload();
-      const response = await api.post("/api/v1/vendas", payload);
-      setVendaConcluida(response.data);
-      toast.success("Venda realizada com sucesso!");
+        const { data } = await api.post("/api/v1/vendas", payload);
+        toast.success("Venda realizada com sucesso!");
+        setVendaConcluida({
+            id: data.id,
+            total: data.totalVenda || totalVenda,
+            metodo: data.formaPagamento || metodoSelecionado,
+            data: data.dataVenda || new Date(),
+            itens: carrinho.map(c => ({ nome: c.descricao, qtd: c.qtd, preco: c.precoVenda }))
+        });
     } catch (error) {
-      console.error(error);
-      const msg = error.response?.data?.message || error.message;
-      toast.error(`Erro: ${msg}`);
-    } finally {
-      setLoadingFinalizar(false);
-    }
+        toast.error(error.response?.data?.message || "Erro ao processar venda.");
+    } finally { setLoadingFinalizar(false); }
   };
 
   const suspenderVenda = async () => {
       if(!confirm("Suspender venda atual?")) return;
-      setLoadingFinalizar(true);
       try {
-          const payload = gerarPayload();
+          const payload = {
+              clienteNome: "Venda Suspensa - " + new Date().toLocaleTimeString(),
+              statusFiscal: "EM_ESPERA",
+              itens: carrinho.map(i => ({ produtoId: i.id, quantidade: i.qtd, precoUnitario: i.precoVenda }))
+          };
           await api.post("/api/v1/vendas/suspender", payload);
-          toast.success("Venda suspensa!");
+          toast.success("Venda em espera.");
           resetarTotalmente();
-      } catch (error) {
-          toast.error("Erro ao suspender");
-      } finally {
-          setLoadingFinalizar(false);
-      }
-  };
-
-  const cancelarVendaTotal = () => {
-      if (confirm("⚠️ Cancelar toda a venda e limpar a tela?")) {
-          resetarTotalmente();
-          toast("Venda cancelada.", { icon: "🗑️" });
-      }
+      } catch (e) { toast.error("Erro ao suspender"); }
   };
 
   const resetarTotalmente = () => {
     setVendaConcluida(null);
     setCarrinho([]);
     setPagamentos([]);
+    setDesconto("");
     setClienteNome("Consumidor Final");
     setClienteDocumento("");
-    setDesconto("");
     limparBusca();
   };
 
   return (
-    <div className="h-[calc(100vh-80px)] flex flex-col md:flex-row gap-4 animate-in fade-in duration-300 font-sans pb-2">
-
+    <div className="h-[calc(100vh-80px)] flex flex-col md:flex-row gap-4 animate-in fade-in duration-300 pb-2">
       {vendaConcluida && <Cupom venda={vendaConcluida} onClose={resetarTotalmente} />}
 
-      {/* --- ESQUERDA: PRODUTOS --- */}
+      {/* --- COLUNA ESQUERDA: CARRINHO --- */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative z-20">
           <div className="flex justify-between items-center mb-3">
             <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" onClick={() => navigate("/vendas")} className="h-8 w-8 text-slate-400">
-                    <ArrowLeft className="h-5 w-5" />
-                </Button>
+                <Button variant="ghost" size="icon" onClick={() => navigate("/vendas")} className="h-8 w-8 text-slate-400"><ArrowLeft/></Button>
                 <div>
-                    <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
-                        <Sparkles className="h-5 w-5 text-[#34BFBF]"/> PDV
-                    </h2>
-                    <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wide">
-                        OPERADOR: <span className="text-[#F22998] font-bold">{operador}</span>
-                    </p>
+                    <h2 className="text-lg font-bold text-slate-700">PDV DD COSMÉTICOS</h2>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold">OPERADOR: <span className="text-[#F22998]">{operador}</span></p>
                 </div>
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={cancelarVendaTotal} className="text-red-500 border-red-200 hover:bg-red-50 h-8 text-xs px-2">
-                    <XCircle className="mr-1 h-3 w-3"/> F4 Cancelar
-                </Button>
-                <Button variant="outline" size="sm" onClick={suspenderVenda} className="text-orange-500 border-orange-200 hover:bg-orange-50 h-8 text-xs px-2">
-                    <PauseCircle className="mr-1 h-3 w-3"/> F6 Suspender
-                </Button>
+                <Button variant="outline" size="sm" onClick={() => confirm("Limpar?") && resetarTotalmente()} className="text-red-500 h-8 text-xs"><XCircle className="mr-1 h-3 w-3"/> F4 Limpar</Button>
+                <Button variant="outline" size="sm" onClick={suspenderVenda} className="text-orange-500 h-8 text-xs"><PauseCircle className="mr-1 h-3 w-3"/> F6 Espera</Button>
             </div>
           </div>
 
           <div className="relative">
-            <Input
-              ref={inputRef}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder="F2: Bipe o código ou digite o nome..."
-              className="pl-10 h-12 text-lg border-slate-200 focus:border-[#F22998] focus:ring-2 focus:ring-[#F22998]/20 bg-slate-50"
-              autoFocus
-            />
-            <div className="absolute left-3 top-3.5 text-slate-400 pointer-events-none">
+            <Input ref={inputRef} onChange={handleInputChange} placeholder="Bipe o código ou digite o nome..." className="pl-10 h-12 text-lg bg-slate-50 border-slate-200" autoFocus />
+            <div className="absolute left-3 top-3.5 text-slate-400">
                 {loadingBusca ? <Loader2 className="h-5 w-5 animate-spin text-[#F22998]"/> : <Search className="h-5 w-5" />}
             </div>
-
             {produtosEncontrados.length > 0 && (
-              <div className="absolute top-full left-0 right-0 bg-white border border-slate-100 rounded-b-xl shadow-2xl mt-1 overflow-hidden z-50 max-h-[50vh] overflow-y-auto">
+              <div className="absolute top-full left-0 right-0 bg-white border rounded-b-xl shadow-2xl z-50 max-h-[40vh] overflow-y-auto">
                 {produtosEncontrados.map(prod => (
-                  <div key={prod.id} onClick={() => adicionarAoCarrinho(prod)} className="p-3 hover:bg-[#F26BB5]/5 cursor-pointer border-b flex justify-between items-center group">
-                    <div>
-                      <div className="font-bold text-slate-800">{prod.descricao}</div>
-                      <div className="text-xs text-slate-400 flex gap-2">
-                        <span className="font-mono bg-slate-100 px-1 rounded">{prod.codigoBarras}</span>
-                        <span>Estoque: {prod.quantidadeEmEstoque}</span>
-                      </div>
-                    </div>
+                  <div key={prod.id} onClick={() => adicionarAoCarrinho(prod)} className="p-3 hover:bg-slate-50 cursor-pointer border-b flex justify-between">
+                    <div><div className="font-bold text-slate-800">{prod.descricao}</div><div className="text-xs text-slate-400">{prod.codigoBarras} | Est: {prod.quantidadeEmEstoque}</div></div>
                     <div className="font-bold text-[#F22998]">R$ {Number(prod.precoVenda).toFixed(2)}</div>
                   </div>
                 ))}
@@ -340,38 +242,22 @@ export default function PDV() {
           </div>
         </div>
 
-        {/* Carrinho */}
-        <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-            <div className="bg-slate-50 p-3 border-b border-slate-100 flex justify-between text-xs font-bold text-slate-500 uppercase">
-                <span>Produto</span>
-                <span className="mr-14">Qtd / Total</span>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+        <div className="flex-1 bg-white rounded-xl border shadow-sm overflow-hidden flex flex-col">
+            <div className="bg-slate-50 p-3 border-b text-[10px] font-bold text-slate-500 flex justify-between"><span>PRODUTO</span><span>SUBTOTAL</span></div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2">
                 {carrinho.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60">
-                        <ShoppingCart className="h-12 w-12 mb-2"/>
-                        <p>Carrinho vazio</p>
-                    </div>
+                    <div className="h-full flex flex-col items-center justify-center text-slate-300"><ShoppingCart className="h-12 w-12 mb-2"/><p>Carrinho vazio</p></div>
                 ) : (
                     carrinho.map(item => (
-                        <div key={item.id} className="flex items-center bg-white p-2 rounded-lg border border-slate-100 shadow-sm group animate-in slide-in-from-left-2">
-                            <div className="flex-1 min-w-0">
-                                <div className="font-bold text-sm text-slate-700 truncate">{item.descricao}</div>
-                                <div className="text-xs text-slate-400">Unit: R$ {Number(item.precoVenda).toFixed(2)}</div>
+                        <div key={item.id} className="flex items-center bg-white p-2 rounded-lg border shadow-sm">
+                            <div className="flex-1"><div className="font-bold text-sm text-slate-700">{item.descricao}</div><div className="text-xs text-slate-400">R$ {Number(item.precoVenda).toFixed(2)}</div></div>
+                            <div className="flex items-center gap-1 mx-4 bg-slate-100 rounded p-1">
+                                <button onClick={() => alterarQuantidade(item.id, -1)} className="h-6 w-6 bg-white rounded shadow-sm">-</button>
+                                <span className="font-bold w-8 text-center">{item.qtd}</span>
+                                <button onClick={() => alterarQuantidade(item.id, 1)} className="h-6 w-6 bg-white rounded shadow-sm">+</button>
                             </div>
-
-                            <div className="flex items-center gap-1 mx-3 bg-slate-100 rounded-md p-0.5 border border-slate-200">
-                                <button onClick={() => alterarQuantidade(item.id, -1)} className="h-7 w-7 flex items-center justify-center bg-white rounded hover:bg-slate-200 text-slate-600 shadow-sm">-</button>
-                                <span className="font-bold w-8 text-center text-sm text-slate-700">{item.qtd}</span>
-                                <button onClick={() => alterarQuantidade(item.id, 1)} className="h-7 w-7 flex items-center justify-center bg-white rounded hover:bg-[#34BFBF] hover:text-white text-[#34BFBF] shadow-sm">+</button>
-                            </div>
-
-                            <div className="w-20 text-right font-bold text-[#34BFBF]">
-                                R$ {(item.qtd * Number(item.precoVenda)).toFixed(2)}
-                            </div>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-300 hover:text-red-500 ml-1" onClick={() => removerDoCarrinho(item.id)}>
-                                <Trash2 className="h-4 w-4"/>
-                            </Button>
+                            <div className="w-20 text-right font-bold text-[#34BFBF]">R$ {(item.qtd * item.precoVenda).toFixed(2)}</div>
+                            <Button variant="ghost" size="icon" onClick={() => removerDoCarrinho(item.id)} className="ml-2 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4"/></Button>
                         </div>
                     ))
                 )}
@@ -379,134 +265,52 @@ export default function PDV() {
         </div>
       </div>
 
-      {/* --- DIREITA: FINANCEIRO --- */}
-      <div className="w-full md:w-[420px] bg-white flex flex-col border border-slate-200 shadow-2xl z-10 h-full rounded-xl overflow-hidden">
-
-        {/* Painel Totais */}
-        <div className="p-5 bg-slate-50 border-b border-slate-100 space-y-2">
-            <div className="flex justify-between items-end">
-                <span className="text-sm font-bold text-slate-600">TOTAL</span>
-                <span className="text-3xl font-bold text-[#F22998]">{totalVenda.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span>
-            </div>
-
-            <div className="flex items-center gap-2 justify-end">
-                <span className="text-xs text-slate-400">Desconto (R$)</span>
-                <Input
-                    className="w-28 h-8 text-right text-xs border-red-100 text-red-500 font-bold focus:border-red-300"
-                    value={desconto}
-                    onChange={handleDescontoChange}
-                    placeholder="R$ 0,00"
-                />
-            </div>
+      {/* --- COLUNA DIREITA: FINANCEIRO --- */}
+      <div className="w-full md:w-[400px] bg-white border rounded-xl shadow-xl flex flex-col">
+        <div className="p-5 bg-slate-50 border-b space-y-2">
+            <div className="flex justify-between items-end"><span className="text-xs font-bold text-slate-500">VALOR TOTAL</span><span className="text-3xl font-black text-[#F22998]">{totalVenda.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</span></div>
+            <div className="flex items-center gap-2 justify-end"><span className="text-[10px] text-slate-400">DESCONTO</span><Input className="w-24 h-8 text-right text-xs font-bold" value={desconto} onChange={handleDescontoChange} placeholder="R$ 0,00"/></div>
         </div>
 
-        {/* Pagamentos */}
         <div className="p-5 flex-1 overflow-y-auto flex flex-col gap-4">
-
             {restante > 0.01 ? (
                 <div className="bg-[#34BFBF]/5 p-4 rounded-xl border border-[#34BFBF]/20 space-y-3">
-                    <p className="text-center text-[#34BFBF] font-bold text-sm">
-                        FALTA PAGAR: {restante.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                    </p>
-
-                    <div className="space-y-2">
-                        <select
-                            className="w-full h-10 px-2 rounded-md border border-slate-300 text-sm bg-white focus:border-[#34BFBF] outline-none"
-                            value={metodoSelecionado}
-                            onChange={e => setMetodoSelecionado(e.target.value)}
-                        >
-                            <option value="DINHEIRO">DINHEIRO</option>
-                            <option value="PIX">PIX</option>
-                            <option value="CREDITO">CRÉDITO</option>
-                            <option value="DEBITO">DÉBITO</option>
-                        </select>
-
-                        <div className="flex gap-2">
-                            <Input
-                                ref={pagamentoRef}
-                                className="h-10 text-right font-bold flex-1"
-                                placeholder="R$ 0,00"
-                                value={valorPagamentoInput}
-                                onChange={handleValorPagamentoChange}
-                                onKeyDown={e => e.key === 'Enter' && adicionarPagamento()}
-                            />
-                            <Button onClick={() => adicionarPagamento()} className="bg-[#34BFBF] hover:bg-[#2aa8a8] text-white h-10 w-12 font-bold shadow-sm">
-                                <Plus className="h-5 w-5"/>
-                            </Button>
-                        </div>
-
-                        {/* SUGESTÕES INTELIGENTES (Botões Rápidos) */}
-                        {metodoSelecionado === "DINHEIRO" && (
-                            <div className="flex gap-2 flex-wrap justify-center mt-2">
-                                <Button size="sm" variant="outline" onClick={() => adicionarPagamento(restante)} className="text-xs h-7 border-green-200 bg-green-50 text-green-700 hover:bg-green-100">
-                                    Exato
-                                </Button>
-                                {restante < 20 && <Button size="sm" variant="outline" onClick={() => adicionarPagamento(50)} className="text-xs h-7">R$ 50</Button>}
-                                {restante < 50 && <Button size="sm" variant="outline" onClick={() => adicionarPagamento(100)} className="text-xs h-7">R$ 100</Button>}
-                            </div>
-                        )}
+                    <p className="text-center text-[#34BFBF] font-black">FALTA PAGAR: {restante.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</p>
+                    <select className="w-full h-10 px-2 rounded-md border text-sm" value={metodoSelecionado} onChange={e => setMetodoSelecionado(e.target.value)}>
+                        <option value="DINHEIRO">DINHEIRO</option><option value="PIX">PIX</option><option value="CREDITO">CRÉDITO</option><option value="DEBITO">DÉBITO</option>
+                    </select>
+                    <div className="flex gap-2">
+                        <Input className="h-10 text-right font-black flex-1" value={valorPagamentoInput} onChange={handleValorPagamentoChange} />
+                        <Button onClick={() => adicionarPagamento()} className="bg-[#34BFBF] h-10 w-12"><Plus/></Button>
                     </div>
                 </div>
             ) : (
-                <div className="bg-green-50 p-4 rounded-xl border border-green-200 text-center animate-in zoom-in-95">
-                    <Check className="h-10 w-10 text-green-600 mx-auto mb-1"/>
-                    <p className="text-green-700 font-bold text-lg">Pagamento Concluído</p>
-                    {troco > 0 && <div className="mt-2 text-sm bg-white/50 py-1 rounded text-green-800 font-mono font-bold">Troco: {troco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</div>}
+                <div className="bg-green-50 p-4 rounded-xl border border-green-200 text-center">
+                    <Check className="h-8 w-8 text-green-600 mx-auto mb-1"/><p className="text-green-700 font-bold">PAGAMENTO OK</p>
+                    {troco > 0 && <div className="text-xs font-bold text-green-800">TROCO: {troco.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</div>}
                 </div>
             )}
 
             <div className="space-y-2">
-                {pagamentos.length > 0 && <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lançamentos</label>}
                 {pagamentos.map((p, idx) => (
-                    <div key={idx} className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-100 text-sm shadow-sm animate-in fade-in">
-                        <span className="flex items-center gap-2 font-medium text-slate-600">
-                            <Wallet className="h-3 w-3 text-slate-400"/> {p.formaPagamento}
-                        </span>
-                        <div className="flex items-center gap-3">
-                            <span className="font-bold text-slate-700">{p.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
-                            <button onClick={() => removerPagamento(idx)} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 className="h-3.5 w-3.5"/></button>
+                    <div key={idx} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border text-sm">
+                        <span className="font-bold text-slate-600">{p.formaPagamento}</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-700">R$ {p.valor.toFixed(2)}</span>
+                            <button onClick={() => removerPagamento(idx)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4"/></button>
                         </div>
                     </div>
                 ))}
             </div>
         </div>
 
-        <div className="p-5 bg-white border-t border-slate-100 space-y-3">
-            {/* CPF E CLIENTE */}
-            <div className="grid grid-cols-2 gap-3">
-                <div className="relative">
-                    <User className="absolute left-2 top-2.5 h-4 w-4 text-slate-400"/>
-                    <Input
-                        className="bg-slate-50 text-xs h-9 pl-8" placeholder="Cliente (Opcional)"
-                        value={clienteNome} onChange={e => setClienteNome(e.target.value)}
-                    />
-                </div>
-                <div className="relative">
-                    <FileText className="absolute left-2 top-2.5 h-4 w-4 text-slate-400"/>
-                    <Input
-                        className="bg-slate-50 text-xs h-9 pl-8" placeholder="CPF/CNPJ"
-                        value={clienteDocumento}
-                        onChange={e => {
-                            let v = e.target.value.replace(/\D/g,"");
-                            if(v.length > 14) v = v.slice(0,14);
-                            if(v.length > 11) {
-                                v = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-                            } else {
-                                v = v.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-                            }
-                            setClienteDocumento(v);
-                        }}
-                    />
-                </div>
+        <div className="p-5 border-t space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+                <Input className="bg-slate-50 text-[10px] h-9" placeholder="Nome Cliente" value={clienteNome} onChange={e => setClienteNome(e.target.value)} />
+                <Input className="bg-slate-50 text-[10px] h-9" placeholder="CPF/CNPJ" value={clienteDocumento} onChange={e => setClienteDocumento(e.target.value)} />
             </div>
-
-            <Button
-                className="w-full h-12 text-base font-bold bg-[#F22998] hover:bg-[#d91e85] shadow-lg shadow-[#F22998]/20 active:scale-95 transition-all rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={finalizarVenda}
-                disabled={carrinho.length === 0 || restante > 0.01 || loadingFinalizar}
-            >
-                {loadingFinalizar ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Check className="mr-2 h-5 w-5" />}
-                Finalizar Venda (F9)
+            <Button className="w-full h-12 bg-[#F22998] hover:bg-[#d91e85] text-white font-bold rounded-xl shadow-lg" onClick={finalizarVenda} disabled={carrinho.length === 0 || restante > 0.01 || loadingFinalizar}>
+                {loadingFinalizar ? <Loader2 className="animate-spin" /> : "FINALIZAR VENDA (F9)"}
             </Button>
         </div>
       </div>
